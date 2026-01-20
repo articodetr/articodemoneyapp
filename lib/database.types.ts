@@ -175,6 +175,7 @@ export interface Database {
           role: 'admin' | 'customer'
           username: string
           full_name: string
+          phone: string | null
           account_number: number
           created_at: string
         }
@@ -183,6 +184,7 @@ export interface Database {
           role?: 'admin' | 'customer'
           username: string
           full_name: string
+          phone?: string | null
           account_number?: number
           created_at?: string
         }
@@ -191,6 +193,7 @@ export interface Database {
           role?: 'admin' | 'customer'
           username?: string
           full_name?: string
+          phone?: string | null
           account_number?: number
           created_at?: string
         }
@@ -250,6 +253,41 @@ export interface Database {
           created_at?: string
         }
       }
+      customer_movements: {
+        Row: {
+          id: string
+          owner_id: string
+          user_customer_id: string
+          movement_number: number
+          currency: 'USD' | 'YER' | 'SAR' | 'EGP' | 'EUR' | 'AED' | 'QAR'
+          amount: number
+          signed_amount: number
+          note: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          owner_id: string
+          user_customer_id: string
+          movement_number?: number
+          currency: 'USD' | 'YER' | 'SAR' | 'EGP' | 'EUR' | 'AED' | 'QAR'
+          amount: number
+          signed_amount: number
+          note?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          owner_id?: string
+          user_customer_id?: string
+          movement_number?: number
+          currency?: 'USD' | 'YER' | 'SAR' | 'EGP' | 'EUR' | 'AED' | 'QAR'
+          amount?: number
+          signed_amount?: number
+          note?: string | null
+          created_at?: string
+        }
+      }
     }
     Views: {
       search_profiles: {
@@ -280,6 +318,14 @@ export interface Database {
           last_activity: string | null
         }
       }
+      customer_balances_by_currency: {
+        Row: {
+          owner_id: string
+          user_customer_id: string
+          currency: string
+          balance: number
+        }
+      }
     }
     Functions: {
       generate_movement_number: {
@@ -303,6 +349,12 @@ export interface Database {
           currency: string
           total_debt: number
         }[]
+      }
+      get_or_create_profit_loss_customer: {
+        Args: {
+          p_owner_id: string
+        }
+        Returns: string
       }
     }
   }

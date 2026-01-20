@@ -64,12 +64,12 @@ export default function AddCustomerModal() {
         query = query.ilike('username', `%${searchQuery.trim()}%`);
       }
 
-      const { data, error } = await query.limit(10);
+      const { data, error } = await query.limit(10) as any;
 
       if (error) throw error;
 
       // Filter out current user from results
-      const filteredResults = (data || []).filter(result => result.id !== currentUser.user.id);
+      const filteredResults = (data || []).filter((result: any) => result.id !== currentUser.user.id);
       setSearchResults(filteredResults);
 
       if (filteredResults.length === 0) {

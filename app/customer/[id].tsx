@@ -141,45 +141,6 @@ function calculateBalanceByCurrency(
   return Object.values(currencyMap).filter((item) => item.balance !== 0);
 }
 
-function getCombinedAmount(
-  movement: AccountMovement,
-  allMovements: AccountMovement[],
-): number {
-  const baseAmount = Number(movement.amount);
-
-  const relatedCommissions = allMovements.filter(
-    (m) =>
-      (m as any).is_commission_movement === true &&
-      (m as any).related_commission_movement_id === movement.id &&
-      m.customer_id === movement.customer_id &&
-      m.movement_type === movement.movement_type &&
-      m.currency === movement.currency
-  );
-
-  const commissionTotal = relatedCommissions.reduce(
-    (sum, m) => sum + Number(m.amount),
-    0,
-  );
-
-  return baseAmount + commissionTotal;
-}
-
-function getRelatedCommission(
-  movement: AccountMovement,
-  allMovements: AccountMovement[],
-): number {
-  const relatedCommissions = allMovements.filter(
-    (m) =>
-      (m as any).is_commission_movement === true &&
-      (m as any).related_commission_movement_id === movement.id &&
-      m.customer_id === movement.customer_id &&
-      m.movement_type === movement.movement_type &&
-      m.currency === movement.currency
-  );
-
-  return relatedCommissions.reduce((sum, m) => sum + Number(m.amount), 0);
-}
-
 export default function CustomerDetailsScreen() {
   const router = useRouter();
   const { id, kind } = useLocalSearchParams();
@@ -204,7 +165,7 @@ export default function CustomerDetailsScreen() {
           .from('profiles')
           .select('id, full_name, account_number, phone')
           .eq('id', id)
-          .maybeSingle();
+          .maybeSingle() as any;
 
         if (error || !profile) {
           Alert.alert('خطأ', 'لم يتم العثور على العميل');
@@ -220,14 +181,13 @@ export default function CustomerDetailsScreen() {
           notes: '',
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-          user_id: '',
         };
       } else {
         const { data: localCustomer, error } = await supabase
           .from('local_customers')
           .select('id, display_name, phone, local_account_number')
           .eq('id', id)
-          .maybeSingle();
+          .maybeSingle() as any;
 
         if (error || !localCustomer) {
           Alert.alert('خطأ', 'لم يتم العثور على العميل');
@@ -243,29 +203,55 @@ export default function CustomerDetailsScreen() {
           notes: '',
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-          user_id: '',
+          is_profit_loss_account: localCustomer.display_name === 'الأرباح والخسائر',
         };
       }
 
-      setCustomer(customerData as Customer);
+      setCustomer(customerData as any);
+
+      const { data: currentUser } = await supabase.auth.getUser();
+      if (!currentUser.user) return;
+
+      const { data: userCustomer } = await supabase
+        .from('user_customers')
+        .select('id')
+        .eq('owner_id', currentUser.user.id)
+        .or(`registered_user_id.eq.${id},local_customer_id.eq.${id}`)
+        .maybeSingle() as any;
+
+      if (!userCustomer) {
+        setMovements([]);
+        setTotalIncoming(0);
+        setTotalOutgoing(0);
+        return;
+      }
 
       const { data: movementsData } = await supabase
-        .from('account_movements')
-        .select('*, is_internal_transfer, transfer_group_id, is_commission_movement, related_commission_movement_id')
-        .eq('customer_id', id)
+        .from('customer_movements')
+        .select('*')
+        .eq('user_customer_id', userCustomer.id)
         .order('created_at', { ascending: false });
 
-      setMovements(movementsData || []);
+      const transformedMovements = (movementsData || []).map((m: any) => ({
+        ...m,
+        customer_id: id,
+        movement_type: m.signed_amount >= 0 ? 'incoming' : 'outgoing',
+        amount: Math.abs(m.signed_amount).toString(),
+        movement_number: m.movement_number.toString(),
+        notes: m.note,
+      }));
+
+      setMovements(transformedMovements || []);
 
       const incoming =
         movementsData
-          ?.filter((m) => m.movement_type === 'incoming')
-          .reduce((sum, m) => sum + Number(m.amount), 0) || 0;
+          ?.filter((m: any) => m.signed_amount > 0)
+          .reduce((sum: number, m: any) => sum + Number(m.signed_amount), 0) || 0;
 
       const outgoing =
         movementsData
-          ?.filter((m) => m.movement_type === 'outgoing')
-          .reduce((sum, m) => sum + Number(m.amount), 0) || 0;
+          ?.filter((m: any) => m.signed_amount < 0)
+          .reduce((sum: number, m: any) => sum + Math.abs(Number(m.signed_amount)), 0) || 0;
 
       setTotalIncoming(incoming);
       setTotalOutgoing(outgoing);
@@ -353,10 +339,25 @@ export default function CustomerDetailsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
+              const { data: currentUser } = await supabase.auth.getUser();
+              if (!currentUser.user) return;
+
+              const { data: userCustomer } = await supabase
+                .from('user_customers')
+                .select('id')
+                .eq('owner_id', currentUser.user.id)
+                .or(`registered_user_id.eq.${id},local_customer_id.eq.${id}`)
+                .maybeSingle() as any;
+
+              if (!userCustomer) {
+                Alert.alert('خطأ', 'لم يتم العثور على العميل');
+                return;
+              }
+
               const { error } = await supabase
-                .from('account_movements')
+                .from('customer_movements')
                 .delete()
-                .eq('customer_id', id);
+                .eq('user_customer_id', userCustomer.id);
 
               if (error) {
                 Alert.alert('خطأ', 'حدث خطأ أثناء تصفير الحساب');
@@ -434,10 +435,19 @@ export default function CustomerDetailsScreen() {
                     return;
                   }
 
-                  await supabase
-                    .from('account_movements')
-                    .delete()
-                    .eq('customer_id', id);
+                  const { data: userCustomer } = await supabase
+                    .from('user_customers')
+                    .select('id')
+                    .eq('owner_id', currentUser.user.id)
+                    .or(`registered_user_id.eq.${id},local_customer_id.eq.${id}`)
+                    .maybeSingle() as any;
+
+                  if (userCustomer) {
+                    await supabase
+                      .from('customer_movements')
+                      .delete()
+                      .eq('user_customer_id', userCustomer.id);
+                  }
 
                   if (customerKind === 'registered') {
                     await supabase
@@ -609,7 +619,7 @@ export default function CustomerDetailsScreen() {
   const confirmDeleteMovement = async (movement: AccountMovement) => {
     try {
       const { error } = await supabase
-        .from('account_movements')
+        .from('customer_movements')
         .delete()
         .eq('id', movement.id);
 
@@ -631,12 +641,6 @@ export default function CustomerDetailsScreen() {
 
   const filteredMovements = movements
     .filter((movement) => {
-      if (customer?.is_profit_loss_account) {
-        return (movement as any).is_commission_movement === true;
-      }
-      return (movement as any).is_commission_movement !== true;
-    })
-    .filter((movement) => {
       if (!searchQuery.trim()) return true;
 
       const query = searchQuery.toLowerCase();
@@ -646,17 +650,13 @@ export default function CustomerDetailsScreen() {
       const date = format(new Date(movement.created_at), 'dd/MM/yyyy');
       const movementTypeText =
         movement.movement_type === 'outgoing' ? 'عليه' : 'له';
-      const senderName = (movement.sender_name || '').toLowerCase();
-      const beneficiaryName = (movement.beneficiary_name || '').toLowerCase();
 
       return (
         movementNumber.includes(query) ||
         notes.includes(query) ||
         amount.includes(query) ||
         date.includes(query) ||
-        movementTypeText.includes(query) ||
-        senderName.includes(query) ||
-        beneficiaryName.includes(query)
+        movementTypeText.includes(query)
       );
     });
 
@@ -892,36 +892,19 @@ export default function CustomerDetailsScreen() {
                           style={[
                             styles.movementType,
                             {
-                              color: (movement as any).is_internal_transfer
-                                ? '#F59E0B'
-                                : movement.movement_type === 'outgoing'
-                                  ? '#EF4444'
-                                  : '#10B981',
+                              color: movement.movement_type === 'outgoing'
+                                ? '#EF4444'
+                                : '#10B981',
                             },
                           ]}
                         >
-                          {(movement as any).is_internal_transfer
-                            ? 'تحويل داخلي'
-                            : movement.movement_type === 'outgoing'
-                              ? 'عليه'
-                              : 'له'}
+                          {movement.movement_type === 'outgoing' ? 'عليه' : 'له'}
                         </Text>
-                        {(movement as any).is_internal_transfer && (
+                        {movement.notes && (
                           <Text style={styles.movementNotes} numberOfLines={1}>
-                            {movement.movement_type === 'outgoing'
-                              ? `إلى: ${movement.beneficiary_name || 'عميل آخر'}`
-                              : `من: ${movement.sender_name || 'عميل آخر'}`}
+                            {movement.notes}
                           </Text>
                         )}
-                        {!(movement as any).is_internal_transfer &&
-                          movement.notes && (
-                            <Text
-                              style={styles.movementNotes}
-                              numberOfLines={1}
-                            >
-                              {movement.notes}
-                            </Text>
-                          )}
                       </View>
 
                       <View style={styles.spacer} />
@@ -930,12 +913,9 @@ export default function CustomerDetailsScreen() {
                         style={[
                           styles.movementIcon,
                           {
-                            backgroundColor: (movement as any)
-                              .is_internal_transfer
-                              ? '#FEF3C7'
-                              : movement.movement_type === 'outgoing'
-                                ? '#FEE2E2'
-                                : '#ECFDF5',
+                            backgroundColor: movement.movement_type === 'outgoing'
+                              ? '#FEE2E2'
+                              : '#ECFDF5',
                           },
                         ]}
                       >
@@ -943,11 +923,9 @@ export default function CustomerDetailsScreen() {
                           style={[
                             styles.currencySymbolText,
                             {
-                              color: (movement as any).is_internal_transfer
-                                ? '#F59E0B'
-                                : movement.movement_type === 'outgoing'
-                                  ? '#EF4444'
-                                  : '#10B981',
+                              color: movement.movement_type === 'outgoing'
+                                ? '#EF4444'
+                                : '#10B981',
                             },
                           ]}
                         >
@@ -960,27 +938,18 @@ export default function CustomerDetailsScreen() {
                           style={[
                             styles.movementAmountText,
                             {
-                              color: (movement as any).is_internal_transfer
-                                ? '#F59E0B'
-                                : movement.movement_type === 'outgoing'
-                                  ? '#EF4444'
-                                  : '#10B981',
+                              color: movement.movement_type === 'outgoing'
+                                ? '#EF4444'
+                                : '#10B981',
                             },
                           ]}
                         >
-                          {Math.round(getCombinedAmount(movement, movements))}
+                          {Math.round(Number(movement.amount))}
                         </Text>
-                        {getRelatedCommission(movement, movements) > 0 && (
-                          <Text style={styles.commissionBadge}>
-                            شامل {Math.round(getRelatedCommission(movement, movements))} عمولة
-                          </Text>
-                        )}
                         <Text style={styles.movementLabel}>
-                          {(movement as any).is_internal_transfer
-                            ? 'تحويل'
-                            : movement.movement_type === 'outgoing'
-                              ? 'من العميل'
-                              : 'للعميل'}
+                          {movement.movement_type === 'outgoing'
+                            ? 'من العميل'
+                            : 'للعميل'}
                         </Text>
                       </View>
                     </TouchableOpacity>

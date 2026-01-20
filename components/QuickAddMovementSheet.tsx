@@ -93,14 +93,14 @@ export default function QuickAddMovementSheet({
 
     setIsLoadingBalance(true);
     try {
-      const { data } = await supabase
-        .from('customer_balances_by_currency')
-        .select('balance')
+      const { data: movements } = await supabase
+        .from('customer_movements')
+        .select('signed_amount')
         .eq('user_customer_id', userCustomerId)
-        .eq('currency', currency)
-        .maybeSingle() as any;
+        .eq('currency', currency);
 
-      setPreviousBalance(data ? Number(data.balance) : 0);
+      const balance = movements?.reduce((sum: number, m: any) => sum + Number(m.signed_amount), 0) || 0;
+      setPreviousBalance(balance);
     } catch (error) {
       console.error('Error loading balance:', error);
       setPreviousBalance(0);
@@ -183,7 +183,7 @@ export default function QuickAddMovementSheet({
 
       const { error: mainError } = await supabase
         .from('customer_movements')
-        .insert(mainMovement);
+        .insert(mainMovement as any);
 
       if (mainError) throw mainError;
 
@@ -193,7 +193,7 @@ export default function QuickAddMovementSheet({
         const { data: profitLossCustomerId, error: profitLossError } = await supabase
           .rpc('get_or_create_profit_loss_customer', {
             p_owner_id: currentUser.user.id,
-          }) as any;
+          } as any) as any;
 
         if (profitLossError) throw profitLossError;
 
@@ -208,7 +208,7 @@ export default function QuickAddMovementSheet({
 
         const { error: commissionError } = await supabase
           .from('customer_movements')
-          .insert(commissionMovement);
+          .insert(commissionMovement as any);
 
         if (commissionError) throw commissionError;
       }
