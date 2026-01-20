@@ -32,6 +32,7 @@ interface QuickAddMovementSheetProps {
   customerAccountNumber: string;
   currentBalances?: any[];
   onSuccess: () => void;
+  customerKind?: 'registered' | 'local';
 }
 
 type MovementType = 'incoming' | 'outgoing';
@@ -42,6 +43,7 @@ export default function QuickAddMovementSheet({
   customerId,
   customerName,
   onSuccess,
+  customerKind = 'local',
 }: QuickAddMovementSheetProps) {
   const { triggerRefresh } = useDataRefresh();
   const [movementType, setMovementType] = useState<MovementType>('incoming');
@@ -159,7 +161,7 @@ export default function QuickAddMovementSheet({
 
   const handleSave = async () => {
     if (!validateForm()) return;
-    if (!userCustomerId) {
+    if (!userCustomerId && customerKind === 'local') {
       Alert.alert('خطأ', 'لم يتم العثور على معرف العميل');
       return;
     }
@@ -172,20 +174,33 @@ export default function QuickAddMovementSheet({
       const amountValue = parseFloat(amount);
       const signedAmount = movementType === 'incoming' ? amountValue : -amountValue;
 
-      const mainMovement = {
-        owner_id: currentUser.user.id,
-        user_customer_id: userCustomerId,
-        currency,
-        amount: amountValue,
-        signed_amount: signedAmount,
-        note: note.trim() || null,
-      };
+      if (customerKind === 'registered') {
+        const { data, error } = await supabase.rpc('create_two_party_movement', {
+          p_initiator_id: currentUser.user.id,
+          p_counter_party_id: customerId,
+          p_currency: currency,
+          p_amount: amountValue,
+          p_signed_amount: signedAmount,
+          p_note: note.trim() || null,
+        } as any);
 
-      const { error: mainError } = await supabase
-        .from('customer_movements')
-        .insert(mainMovement as any);
+        if (error) throw error;
+      } else {
+        const mainMovement = {
+          owner_id: currentUser.user.id,
+          user_customer_id: userCustomerId,
+          currency,
+          amount: amountValue,
+          signed_amount: signedAmount,
+          note: note.trim() || null,
+        };
 
-      if (mainError) throw mainError;
+        const { error: mainError } = await supabase
+          .from('customer_movements')
+          .insert(mainMovement as any);
+
+        if (mainError) throw mainError;
+      }
 
       if (movementType === 'incoming' && commissionEnabled) {
         const commissionValue = parseFloat(commissionAmount);

@@ -226,11 +226,23 @@ export default function CustomerDetailsScreen() {
         return;
       }
 
-      const { data: movementsData } = await supabase
-        .from('customer_movements')
-        .select('*')
-        .eq('user_customer_id', userCustomer.id)
-        .order('created_at', { ascending: false });
+      let movementsData;
+
+      if (customerKind === 'registered') {
+        const { data } = await supabase
+          .from('customer_movements')
+          .select('*')
+          .or(`and(owner_id.eq.${currentUser.user.id},user_customer_id.eq.${userCustomer.id}),and(owner_id.eq.${id},counter_party_id.eq.${currentUser.user.id})`)
+          .order('created_at', { ascending: false });
+        movementsData = data;
+      } else {
+        const { data } = await supabase
+          .from('customer_movements')
+          .select('*')
+          .eq('user_customer_id', userCustomer.id)
+          .order('created_at', { ascending: false });
+        movementsData = data;
+      }
 
       const transformedMovements = (movementsData || []).map((m: any) => ({
         ...m,
@@ -973,6 +985,7 @@ export default function CustomerDetailsScreen() {
           customerName={customer.name}
           customerAccountNumber={customer.account_number}
           currentBalances={currencyBalances}
+          customerKind={(kind as 'registered' | 'local') || 'local'}
           onSuccess={() => {
             loadCustomerData();
           }}
