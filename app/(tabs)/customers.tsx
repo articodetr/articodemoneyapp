@@ -13,36 +13,52 @@ import {
   Platform,
   Pressable,
   Keyboard,
+  I18nManager,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
-import { Plus, Search, User, Phone, Hash } from 'lucide-react-native';
+import { Plus, Search, TrendingUp } from 'lucide-react-native';
 
-interface RegisteredCustomer {
-  id: string;
-  kind: 'registered';
-  username: string;
-  full_name: string;
-  account_number: number;
-  created_at: string;
+I18nManager.allowRTL(true);
+I18nManager.forceRTL(true);
+
+interface Balance {
+  currency: string;
+  amount: number;
 }
 
-interface LocalCustomer {
+interface CustomerWithBalances {
   id: string;
-  kind: 'local';
-  display_name: string;
-  phone: string | null;
-  note: string | null;
-  local_account_number: number;
-  created_at: string;
+  name: string;
+  username?: string;
+  initials: string;
+  avatarColor: string;
+  balances: Balance[];
 }
 
-type Customer = RegisteredCustomer | LocalCustomer;
+const AVATAR_COLORS = [
+  '#10B981',
+  '#F59E0B',
+  '#EF4444',
+  '#8B5CF6',
+  '#EC4899',
+  '#14B8A6',
+];
+
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: '$',
+  YER: 'ر.ي',
+  SAR: 'ر.س',
+  EGP: 'ج.م',
+  EUR: '€',
+  AED: 'د.إ',
+  QAR: 'ر.ق',
+};
 
 export default function CustomersScreen() {
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [filteredCustomers, setFilteredCustomers] = useState<Customer[]>([]);
+  const [customers, setCustomers] = useState<CustomerWithBalances[]>([]);
+  const [filteredCustomers, setFilteredCustomers] = useState<CustomerWithBalances[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -56,27 +72,23 @@ export default function CustomersScreen() {
   useEffect(() => {
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
-      const filtered = customers.filter((customer) => {
-        if (customer.kind === 'registered') {
-          return (
-            customer.full_name.toLowerCase().includes(query) ||
-            customer.username.toLowerCase().includes(query) ||
-            customer.account_number.toString().includes(query)
-          );
-        } else {
-          const localAccountStr = `L-${customer.local_account_number.toString().padStart(4, '0')}`;
-          return (
-            customer.display_name.toLowerCase().includes(query) ||
-            customer.phone?.includes(query) ||
-            localAccountStr.includes(query.toUpperCase())
-          );
-        }
-      });
+      const filtered = customers.filter((customer) =>
+        customer.name.toLowerCase().includes(query) ||
+        customer.username?.toLowerCase().includes(query)
+      );
       setFilteredCustomers(filtered);
     } else {
       setFilteredCustomers(customers);
     }
   }, [searchQuery, customers]);
+
+  const getInitials = (name: string): string => {
+    const words = name.trim().split(' ');
+    if (words.length >= 2) {
+      return (words[0][0] + words[1][0]).toUpperCase();
+    }
+    return words[0].substring(0, 2).toUpperCase();
+  };
 
   const loadCustomers = async () => {
     setLoading(true);
@@ -89,7 +101,7 @@ export default function CustomersScreen() {
 
       if (error) throw error;
 
-      const customersList: Customer[] = [];
+      const customersList: CustomerWithBalances[] = [];
 
       for (const item of data || []) {
         if (item.kind === 'registered' && item.registered_user_id) {
@@ -102,11 +114,14 @@ export default function CustomersScreen() {
           if (profileData) {
             customersList.push({
               id: item.id,
-              kind: 'registered',
+              name: profileData.full_name,
               username: profileData.username,
-              full_name: profileData.full_name,
-              account_number: profileData.account_number,
-              created_at: item.created_at,
+              initials: getInitials(profileData.full_name),
+              avatarColor: AVATAR_COLORS[customersList.length % AVATAR_COLORS.length],
+              balances: [
+                { currency: 'USD', amount: -30892 },
+                { currency: 'YER', amount: 7783 },
+              ],
             });
           }
         } else if (item.kind === 'local' && item.local_customer_id) {
@@ -119,12 +134,14 @@ export default function CustomersScreen() {
           if (localData) {
             customersList.push({
               id: item.id,
-              kind: 'local',
-              display_name: localData.display_name,
-              phone: localData.phone,
-              note: localData.note,
-              local_account_number: localData.local_account_number,
-              created_at: item.created_at,
+              name: localData.display_name,
+              initials: getInitials(localData.display_name),
+              avatarColor: AVATAR_COLORS[customersList.length % AVATAR_COLORS.length],
+              balances: [
+                { currency: 'USD', amount: 4224 },
+                { currency: 'YER', amount: 2222 },
+                { currency: 'EGP', amount: 1 },
+              ],
             });
           }
         }
@@ -138,54 +155,55 @@ export default function CustomersScreen() {
     }
   };
 
-  const renderCustomerCard = ({ item }: { item: Customer }) => (
+  const formatAmount = (amount: number, currency: string): string => {
+    const symbol = CURRENCY_SYMBOLS[currency] || currency;
+    const sign = amount < 0 ? '-' : '+';
+    const absAmount = Math.abs(amount).toLocaleString('en-US');
+    return `${symbol} ${sign}${absAmount}`;
+  };
+
+  const renderProfitLossCard = () => (
+    <TouchableOpacity style={styles.profitLossCard}>
+      <View style={styles.profitLossIcon}>
+        <TrendingUp color="#FF9500" size={24} />
+      </View>
+      <View style={styles.profitLossContent}>
+        <Text style={styles.profitLossTitle}>الأرباح والخسائر 💰</Text>
+      </View>
+      <Text style={styles.profitLossStatus}>متساوي</Text>
+    </TouchableOpacity>
+  );
+
+  const renderCustomerCard = ({ item }: { item: CustomerWithBalances }) => (
     <TouchableOpacity
-      style={[
-        styles.customerCard,
-        item.kind === 'local' && styles.localCustomerCard,
-      ]}
+      style={styles.customerCard}
       onPress={() => router.push(`/customer/${item.id}` as any)}
     >
-      <View style={styles.customerHeader}>
-        <View
-          style={[
-            styles.customerAvatar,
-            item.kind === 'local' && styles.localCustomerAvatar,
-          ]}
-        >
-          <User
-            color={item.kind === 'local' ? '#FF9500' : '#007AFF'}
-            size={24}
-          />
+      <View style={styles.customerContent}>
+        <View style={styles.balancesContainer}>
+          {item.balances.map((balance, index) => (
+            <Text
+              key={index}
+              style={[
+                styles.balanceText,
+                balance.amount < 0 ? styles.balanceNegative : styles.balancePositive,
+              ]}
+            >
+              {formatAmount(balance.amount, balance.currency)}
+            </Text>
+          ))}
         </View>
         <View style={styles.customerInfo}>
-          <Text style={styles.customerName}>
-            {item.kind === 'registered' ? item.full_name : item.display_name}
-          </Text>
-          {item.kind === 'registered' && (
-            <Text style={styles.customerUsername}>@{item.username}</Text>
-          )}
-          {item.kind === 'local' && item.phone && (
-            <View style={styles.phoneContainer}>
-              <Phone color="#666" size={14} />
-              <Text style={styles.customerPhone}>{item.phone}</Text>
-            </View>
-          )}
-        </View>
-        {item.kind === 'local' && (
-          <View style={styles.localBadge}>
-            <Text style={styles.localBadgeText}>غير مسجّل</Text>
+          <View style={[styles.avatar, { backgroundColor: item.avatarColor }]}>
+            <Text style={styles.avatarText}>{item.initials}</Text>
           </View>
-        )}
-      </View>
-
-      <View style={styles.accountNumberContainer}>
-        <Hash color="#666" size={14} />
-        <Text style={styles.accountNumber}>
-          {item.kind === 'registered'
-            ? item.account_number
-            : `L-${item.local_account_number.toString().padStart(4, '0')}`}
-        </Text>
+          <View style={styles.customerDetails}>
+            <Text style={styles.customerName}>{item.name}</Text>
+            {item.username && (
+              <Text style={styles.customerUsername}>@{item.username}</Text>
+            )}
+          </View>
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -194,19 +212,13 @@ export default function CustomersScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>العملاء</Text>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => setModalVisible(true)}
-        >
-          <Plus color="#fff" size={24} />
-        </TouchableOpacity>
       </View>
 
       <View style={styles.searchContainer}>
-        <Search color="#666" size={20} />
+        <Search color="#999" size={20} />
         <TextInput
           style={styles.searchInput}
-          placeholder="ابحث برقم الحساب أو اسم المستخدم"
+          placeholder="ابحث عن عميل..."
           placeholderTextColor="#999"
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -215,7 +227,7 @@ export default function CustomersScreen() {
 
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#007AFF" />
+          <ActivityIndicator size="large" color="#10B981" />
         </View>
       ) : (
         <FlatList
@@ -223,9 +235,9 @@ export default function CustomersScreen() {
           renderItem={renderCustomerCard}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContainer}
+          ListHeaderComponent={renderProfitLossCard}
           ListEmptyComponent={
             <View style={styles.emptyState}>
-              <User color="#ccc" size={64} />
               <Text style={styles.emptyText}>لا يوجد عملاء</Text>
               <TouchableOpacity
                 style={styles.emptyButton}
@@ -237,6 +249,13 @@ export default function CustomersScreen() {
           }
         />
       )}
+
+      <TouchableOpacity
+        style={styles.floatingButton}
+        onPress={() => setModalVisible(true)}
+      >
+        <Plus color="#fff" size={28} />
+      </TouchableOpacity>
 
       <Modal
         visible={modalVisible}
@@ -465,12 +484,6 @@ function AddCustomerModal({ visible, onClose, onSuccess }: AddCustomerModalProps
                     <Text style={styles.resultUsername}>
                       @{searchResult.username}
                     </Text>
-                    <View style={styles.resultAccount}>
-                      <Hash color="#666" size={14} />
-                      <Text style={styles.resultAccountText}>
-                        {searchResult.account_number}
-                      </Text>
-                    </View>
 
                     <TouchableOpacity
                       style={[styles.addResultButton, adding && styles.buttonDisabled]}
@@ -539,7 +552,7 @@ function AddCustomerModal({ visible, onClose, onSuccess }: AddCustomerModalProps
           </ScrollView>
 
           <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-            <Text style={styles.closeButtonText}>إغلاق</Text>
+            <Text style={styles.closeButtonText}>إلغاء</Text>
           </TouchableOpacity>
         </Pressable>
       </Pressable>
@@ -550,44 +563,36 @@ function AddCustomerModal({ visible, onClose, onSuccess }: AddCustomerModalProps
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F5F5F5',
   },
   header: {
-    backgroundColor: '#007AFF',
     paddingTop: 60,
-    paddingBottom: 16,
-    paddingHorizontal: 24,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    backgroundColor: '#fff',
   },
   title: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: 'bold',
-    color: '#fff',
-  },
-  addButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    color: '#000',
+    textAlign: 'right',
   },
   searchContainer: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     backgroundColor: '#fff',
-    margin: 16,
+    marginHorizontal: 16,
+    marginTop: 16,
     paddingHorizontal: 16,
     borderRadius: 12,
-    gap: 12,
+    height: 48,
   },
   searchInput: {
     flex: 1,
-    paddingVertical: 12,
     fontSize: 16,
     textAlign: 'right',
+    marginRight: 12,
+    color: '#000',
   },
   loadingContainer: {
     flex: 1,
@@ -596,84 +601,115 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     padding: 16,
-    paddingTop: 0,
   },
-  customerCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  localCustomerCard: {
+  profitLossCard: {
     backgroundColor: '#FFF9E6',
-    borderLeftWidth: 4,
-    borderLeftColor: '#FF9500',
-  },
-  customerHeader: {
-    flexDirection: 'row',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: 12,
-    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#FFE6A0',
   },
-  customerAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#F0F8FF',
+  profitLossIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FFF',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  localCustomerAvatar: {
-    backgroundColor: '#FFF3E0',
+  profitLossContent: {
+    flex: 1,
+    marginRight: 16,
+  },
+  profitLossTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#000',
+    textAlign: 'right',
+  },
+  profitLossStatus: {
+    fontSize: 14,
+    color: '#666',
+    marginLeft: 16,
+  },
+  customerCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  customerContent: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   customerInfo: {
-    flex: 1,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+  },
+  avatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  customerDetails: {
+    marginRight: 12,
+    alignItems: 'flex-end',
   },
   customerName: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
     color: '#000',
     marginBottom: 2,
   },
   customerUsername: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#666',
   },
-  phoneContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+  balancesContainer: {
+    alignItems: 'flex-start',
   },
-  customerPhone: {
-    fontSize: 14,
-    color: '#666',
-  },
-  localBadge: {
-    backgroundColor: '#FF9500',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  localBadgeText: {
-    color: '#fff',
-    fontSize: 11,
+  balanceText: {
+    fontSize: 15,
     fontWeight: '600',
+    marginBottom: 4,
   },
-  accountNumberContainer: {
-    flexDirection: 'row',
+  balanceNegative: {
+    color: '#10B981',
+  },
+  balancePositive: {
+    color: '#EF4444',
+  },
+  floatingButton: {
+    position: 'absolute',
+    bottom: 90,
+    left: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#10B981',
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 4,
-    marginTop: 4,
-  },
-  accountNumber: {
-    fontSize: 14,
-    color: '#666',
-    fontWeight: '500',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   emptyState: {
     alignItems: 'center',
@@ -683,14 +719,13 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 18,
     color: '#999',
-    marginTop: 16,
     marginBottom: 24,
   },
   emptyButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#10B981',
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 12,
   },
   emptyButtonText: {
     color: '#fff',
@@ -710,10 +745,11 @@ const styles = StyleSheet.create({
     maxHeight: '85%',
   },
   modalTitle: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
     marginBottom: 24,
     textAlign: 'center',
+    color: '#000',
   },
   tabs: {
     flexDirection: 'row',
@@ -742,26 +778,27 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   activeTabText: {
-    color: '#007AFF',
+    color: '#10B981',
   },
   tabContent: {
     maxHeight: 400,
   },
   input: {
     backgroundColor: '#f5f5f5',
-    borderRadius: 8,
+    borderRadius: 12,
     padding: 16,
     fontSize: 16,
     marginBottom: 16,
     textAlign: 'right',
+    color: '#000',
   },
   textArea: {
     height: 80,
     textAlignVertical: 'top',
   },
   searchButton: {
-    backgroundColor: '#007AFF',
-    borderRadius: 8,
+    backgroundColor: '#10B981',
+    borderRadius: 12,
     padding: 16,
     alignItems: 'center',
     marginBottom: 16,
@@ -775,8 +812,8 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   errorText: {
-    backgroundColor: '#ffebee',
-    color: '#c62828',
+    backgroundColor: '#FEE2E2',
+    color: '#DC2626',
     padding: 12,
     borderRadius: 8,
     marginBottom: 16,
@@ -790,33 +827,22 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   resultName: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '600',
     color: '#000',
     marginBottom: 4,
     textAlign: 'right',
   },
   resultUsername: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 8,
-    textAlign: 'right',
-  },
-  resultAccount: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginBottom: 16,
-  },
-  resultAccountText: {
     fontSize: 14,
     color: '#666',
-    fontWeight: '500',
+    marginBottom: 16,
+    textAlign: 'right',
   },
   addResultButton: {
-    backgroundColor: '#34C759',
-    borderRadius: 8,
-    padding: 12,
+    backgroundColor: '#10B981',
+    borderRadius: 12,
+    padding: 14,
     alignItems: 'center',
   },
   addResultButtonText: {
@@ -825,8 +851,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   addButton2: {
-    backgroundColor: '#007AFF',
-    borderRadius: 8,
+    backgroundColor: '#10B981',
+    borderRadius: 12,
     padding: 16,
     alignItems: 'center',
     marginTop: 8,
@@ -838,7 +864,7 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     backgroundColor: '#f5f5f5',
-    borderRadius: 8,
+    borderRadius: 12,
     padding: 16,
     alignItems: 'center',
     marginTop: 16,
