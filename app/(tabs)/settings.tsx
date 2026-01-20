@@ -246,6 +246,14 @@ export default function SettingsScreen() {
               </>
             )}
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.advancedSettingsButton}
+            onPress={() => router.push('/shop-settings')}
+          >
+            <Store color="#007AFF" size={20} />
+            <Text style={styles.advancedSettingsText}>إعدادات الشعار والسندات</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -534,6 +542,23 @@ const styles = StyleSheet.create({
   saveButtonText: {
     color: '#fff',
     fontSize: 16,
+    fontWeight: '600',
+  },
+  advancedSettingsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#F0F0F0',
+    padding: 14,
+    borderRadius: 8,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#007AFF',
+  },
+  advancedSettingsText: {
+    color: '#007AFF',
+    fontSize: 15,
     fontWeight: '600',
   },
   modalOverlay: {

@@ -89,27 +89,57 @@ export async function pickImageFromCamera(): Promise<PickImageResult> {
   }
 }
 
+export async function pickPngFile(): Promise<string | null> {
+  try {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (result.canceled) {
+      return null;
+    }
+
+    return result.assets[0].uri;
+  } catch (error) {
+    console.error('Error picking PNG file:', error);
+    throw new Error('فشل اختيار الملف');
+  }
+}
+
 export async function uploadLogo(
-  base64: string,
+  uriOrBase64: string,
   fileName?: string,
-): Promise<UploadResult> {
+): Promise<string> {
   try {
     const { data: userData, error: userError } = await supabase.auth.getUser();
 
     if (userError || !userData.user) {
-      return { success: false, error: 'يجب تسجيل الدخول أولاً' };
+      throw new Error('يجب تسجيل الدخول أولاً');
     }
 
     const fileExt = fileName?.split('.').pop() || 'png';
     const validExtensions = ['jpg', 'jpeg', 'png'];
 
     if (!validExtensions.includes(fileExt.toLowerCase())) {
-      return { success: false, error: 'نوع الملف غير مدعوم. استخدم JPG أو PNG' };
+      throw new Error('نوع الملف غير مدعوم. استخدم JPG أو PNG');
     }
 
     const filePath = `${userData.user.id}/${Date.now()}.${fileExt}`;
 
-    const arrayBuffer = decode(base64);
+    let base64Data: string;
+    if (uriOrBase64.startsWith('file://') || uriOrBase64.startsWith('content://')) {
+      const fileData = await FileSystem.readAsStringAsync(uriOrBase64, {
+        encoding: 'base64' as any,
+      });
+      base64Data = fileData;
+    } else {
+      base64Data = uriOrBase64;
+    }
+
+    const arrayBuffer = decode(base64Data);
 
     const { data, error } = await supabase.storage
       .from('shop-logos')
@@ -120,23 +150,17 @@ export async function uploadLogo(
 
     if (error) {
       console.error('Error uploading logo:', error);
-      return { success: false, error: 'فشل رفع الصورة' };
+      throw new Error('فشل رفع الصورة');
     }
 
     const { data: urlData } = supabase.storage
       .from('shop-logos')
       .getPublicUrl(data.path);
 
-    return {
-      success: true,
-      url: urlData.publicUrl,
-    };
+    return urlData.publicUrl;
   } catch (error) {
     console.error('Error in uploadLogo:', error);
-    return {
-      success: false,
-      error: 'حدث خطأ أثناء رفع الصورة',
-    };
+    throw error;
   }
 }
 

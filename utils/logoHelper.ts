@@ -14,7 +14,7 @@ async function getDefaultLogoBase64(): Promise<string> {
     }
 
     const base64 = await FileSystem.readAsStringAsync(asset.localUri || asset.uri, {
-      encoding: FileSystem.EncodingType.Base64,
+      encoding: 'base64' as any,
     });
 
     return `data:image/png;base64,${base64}`;
@@ -98,6 +98,10 @@ export async function getLogoUrl(): Promise<string | null> {
     console.error('Error in getLogoUrl:', error);
     return null;
   }
+}
+
+export function clearLogoCache() {
+  return Promise.resolve();
 }
 
 export async function getReceiptLogoBase64(): Promise<string> {

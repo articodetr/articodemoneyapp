@@ -11,6 +11,7 @@ import {
   Alert,
 } from 'react-native';
 import { X, ArrowUp, ArrowDown, Plus, Save, Printer } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useDataRefresh } from '@/contexts/DataRefreshContext';
 import { generateAndShareReceipt } from '@/services/receiptService';
@@ -47,6 +48,7 @@ export default function QuickAddMovementSheet({
   onSuccess,
   customerKind = 'local',
 }: QuickAddMovementSheetProps) {
+  const router = useRouter();
   const { triggerRefresh } = useDataRefresh();
   const [movementType, setMovementType] = useState<MovementType>('incoming');
   const [amount, setAmount] = useState('');
@@ -60,6 +62,7 @@ export default function QuickAddMovementSheet({
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
   const [userCustomerId, setUserCustomerId] = useState<string>('');
   const [lastMovementNumber, setLastMovementNumber] = useState<string>('');
+  const [lastMovementId, setLastMovementId] = useState<string>('');
 
   useEffect(() => {
     if (visible) {
@@ -203,11 +206,13 @@ export default function QuickAddMovementSheet({
         const { data: insertedData, error: mainError } = await supabase
           .from('customer_movements')
           .insert(mainMovement as any)
-          .select('movement_number')
+          .select('id, movement_number')
           .single();
 
         if (mainError) throw mainError;
         movementNumber = insertedData?.movement_number.toString() || '';
+        setLastMovementId(insertedData?.id || '');
+        setLastMovementNumber(movementNumber);
       }
 
       if (movementType === 'incoming' && commissionEnabled) {
@@ -239,34 +244,30 @@ export default function QuickAddMovementSheet({
       triggerRefresh();
       onSuccess();
 
-      if (shouldPrint && movementNumber) {
-        setLastMovementNumber(movementNumber);
-        const success = await generateAndShareReceipt({
-          receiptNumber: movementNumber,
-          customerName,
-          accountNumber: customerAccountNumber || '',
-          amount: amountValue,
-          currency,
-          currencySymbol: getCurrencySymbol(currency),
-          date: new Date(),
-          movementType,
-          notes: note.trim() || undefined,
-          commission:
-            movementType === 'incoming' && commissionEnabled
-              ? parseFloat(commissionAmount)
-              : undefined,
-        });
-
-        if (success) {
-          Alert.alert('نجح', 'تم إضافة الحركة وإنشاء السند بنجاح');
-        } else {
-          Alert.alert('نجح', 'تم إضافة الحركة بنجاح، لكن فشل إنشاء السند');
-        }
-      } else {
-        Alert.alert('نجح', 'تم إضافة الحركة بنجاح');
-      }
-
+      const savedMovementId = lastMovementId;
       handleClose();
+
+      Alert.alert('نجح', 'تم إضافة الحركة بنجاح', [
+        {
+          text: 'عرض السند',
+          onPress: () => {
+            if (savedMovementId) {
+              router.push({
+                pathname: '/receipt-preview',
+                params: {
+                  movementId: savedMovementId,
+                  customerName,
+                  customerAccountNumber: customerAccountNumber || '',
+                },
+              });
+            }
+          },
+        },
+        {
+          text: 'إغلاق',
+          style: 'cancel',
+        },
+      ]);
     } catch (error) {
       console.error('Error saving movement:', error);
       Alert.alert('خطأ', 'حدث خطأ أثناء حفظ الحركة');

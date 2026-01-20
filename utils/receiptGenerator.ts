@@ -18,7 +18,7 @@ interface ReceiptData {
   shopPhone?: string;
 }
 
-function generateQRCodeData(receipt: ReceiptData): string {
+export function generateQRCodeData(receipt: ReceiptData): string {
   const data = {
     receipt: receipt.receiptNumber,
     customer: receipt.customerName,

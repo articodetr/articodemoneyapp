@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import { AppSettings } from '@/types/database';
 
 interface Profile {
   id: string;
@@ -16,9 +17,13 @@ interface AuthContextType {
   user: User | null;
   profile: Profile | null;
   loading: boolean;
+  settings: AppSettings | null;
+  currentUser: Profile | null;
   signUp: (username: string, fullName: string, password: string) => Promise<{ error: any }>;
   signIn: (username: string, password: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
+  updateSettings: (updates: Partial<AppSettings>) => Promise<boolean>;
+  refreshSettings: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -27,6 +32,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [settings, setSettings] = useState<AppSettings | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -61,6 +67,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
           }
 
+          await loadSettings();
+
           console.log('[Auth] Setting loading to false');
           setLoading(false);
         }
@@ -69,6 +77,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (mounted) {
           setLoading(false);
         }
+      }
+    };
+
+    const loadSettings = async () => {
+      try {
+        const FIXED_SETTINGS_ID = '00000000-0000-0000-0000-000000000000';
+        const { data, error } = await supabase
+          .from('app_settings')
+          .select('*')
+          .eq('id', FIXED_SETTINGS_ID)
+          .maybeSingle();
+
+        if (!error && data) {
+          setSettings(data);
+        }
+      } catch (error) {
+        console.error('[Auth] Error loading settings:', error);
       }
     };
 
@@ -148,6 +173,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut();
   };
 
+  const updateSettings = async (updates: Partial<AppSettings>): Promise<boolean> => {
+    try {
+      const FIXED_SETTINGS_ID = '00000000-0000-0000-0000-000000000000';
+      const { error } = await supabase
+        .from('app_settings')
+        .update(updates)
+        .eq('id', FIXED_SETTINGS_ID);
+
+      if (error) {
+        console.error('[Auth] Error updating settings:', error);
+        return false;
+      }
+
+      await refreshSettings();
+      return true;
+    } catch (error) {
+      console.error('[Auth] Error updating settings:', error);
+      return false;
+    }
+  };
+
+  const refreshSettings = async () => {
+    try {
+      const FIXED_SETTINGS_ID = '00000000-0000-0000-0000-000000000000';
+      const { data, error } = await supabase
+        .from('app_settings')
+        .select('*')
+        .eq('id', FIXED_SETTINGS_ID)
+        .maybeSingle();
+
+      if (!error && data) {
+        setSettings(data);
+      }
+    } catch (error) {
+      console.error('[Auth] Error refreshing settings:', error);
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -155,9 +218,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         profile,
         loading,
+        settings,
+        currentUser: profile,
         signUp,
         signIn,
         signOut,
+        updateSettings,
+        refreshSettings,
       }}
     >
       {children}
