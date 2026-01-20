@@ -12,8 +12,13 @@ import {
 import { useRouter } from 'expo-router';
 import { Plus, Search } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
-import { Customer, CustomerBalanceByCurrency, CURRENCIES } from '@/types/database';
+import { Customer, CURRENCIES } from '@/types/database';
 import { useDataRefresh } from '@/contexts/DataRefreshContext';
+
+interface CustomerBalance {
+  currency: string;
+  balance: number;
+}
 
 interface CustomerWithBalances {
   id: string;
@@ -21,7 +26,7 @@ interface CustomerWithBalances {
   phone: string;
   account_number?: number;
   kind: 'registered' | 'local';
-  balances: CustomerBalanceByCurrency[];
+  balances: CustomerBalance[];
 }
 
 export default function CustomersScreen() {
@@ -111,10 +116,46 @@ export default function CustomersScreen() {
         (localCustomersResult.data || []).map((lc: any) => [lc.id, lc])
       );
 
+      // Load all movements for these customers
+      const userCustomerIds = userCustomersData.map((uc: any) => uc.id);
+
+      const { data: movements } = await supabase
+        .from('customer_movements')
+        .select('user_customer_id, currency, signed_amount')
+        .in('user_customer_id', userCustomerIds);
+
+      // Calculate balances per customer per currency
+      const balancesMap = new Map<string, Map<string, number>>();
+
+      movements?.forEach((m: any) => {
+        if (!balancesMap.has(m.user_customer_id)) {
+          balancesMap.set(m.user_customer_id, new Map());
+        }
+        const customerBalances = balancesMap.get(m.user_customer_id)!;
+        customerBalances.set(
+          m.currency,
+          (customerBalances.get(m.currency) || 0) + Number(m.signed_amount)
+        );
+      });
+
       // Build customer list maintaining original order
       const customersWithBalances: CustomerWithBalances[] = [];
 
       for (const userCustomer of userCustomersData) {
+        let customerBalances: CustomerBalance[] = [];
+
+        // Get balances for this customer
+        const balances = balancesMap.get(userCustomer.id);
+        if (balances) {
+          customerBalances = Array.from(balances.entries())
+            .filter(([_, balance]) => balance !== 0)
+            .map(([currency, balance]) => ({
+              currency,
+              balance,
+            }))
+            .sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance));
+        }
+
         if (userCustomer.kind === 'registered' && userCustomer.registered_user_id) {
           const profile = profilesMap.get(userCustomer.registered_user_id);
           if (profile) {
@@ -124,7 +165,7 @@ export default function CustomersScreen() {
               phone: '',
               account_number: profile.account_number,
               kind: 'registered',
-              balances: [],
+              balances: customerBalances,
             });
           }
         } else if (userCustomer.kind === 'local' && userCustomer.local_customer_id) {
@@ -136,7 +177,7 @@ export default function CustomersScreen() {
               phone: localCustomer.phone || '',
               account_number: localCustomer.local_account_number,
               kind: 'local',
-              balances: [],
+              balances: customerBalances,
             });
           }
         }
