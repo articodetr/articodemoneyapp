@@ -1,14 +1,23 @@
-import { useEffect } from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { useEffect, useState } from 'react';
+import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function AuthIndex() {
   const { session, loading, isPinSet, isPinVerified } = useAuth();
   const router = useRouter();
+  const [forceRedirect, setForceRedirect] = useState(false);
 
   useEffect(() => {
-    if (!loading) {
+    const timeout = setTimeout(() => {
+      setForceRedirect(true);
+    }, 5000);
+
+    return () => clearTimeout(timeout);
+  }, []);
+
+  useEffect(() => {
+    if (!loading || forceRedirect) {
       if (!session) {
         router.replace('/(auth)/sign-in');
       } else if (isPinSet && !isPinVerified) {
@@ -17,11 +26,14 @@ export default function AuthIndex() {
         router.replace('/(tabs)');
       }
     }
-  }, [session, loading, isPinSet, isPinVerified]);
+  }, [session, loading, isPinSet, isPinVerified, forceRedirect]);
 
   return (
     <View style={styles.container}>
       <ActivityIndicator size="large" color="#007AFF" />
+      {forceRedirect && (
+        <Text style={styles.text}>جاري التحميل...</Text>
+      )}
     </View>
   );
 }
@@ -32,5 +44,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#fff',
+  },
+  text: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#666',
   },
 });

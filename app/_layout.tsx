@@ -7,9 +7,14 @@ import { AuthProvider } from '@/contexts/AuthContext';
 export default function RootLayout() {
   useFrameworkReady();
 
+  useEffect(() => {
+    console.log('RootLayout mounted');
+  }, []);
+
   return (
     <AuthProvider>
       <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="index" />
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="+not-found" />
