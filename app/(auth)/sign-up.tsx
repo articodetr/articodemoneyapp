@@ -9,6 +9,8 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
+  Pressable,
+  Keyboard,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
@@ -66,73 +68,79 @@ export default function SignUp() {
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.content}>
-          <Text style={styles.title}>الطرف</Text>
-          <Text style={styles.subtitle}>إنشاء حساب جديد</Text>
+      <Pressable style={{ flex: 1 }} onPress={Keyboard.dismiss}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.content}>
+            <Text style={styles.title}>الطرف</Text>
+            <Text style={styles.subtitle}>إنشاء حساب جديد</Text>
 
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>الاسم الكامل</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="أدخل اسمك الكامل"
-              placeholderTextColor="#999"
-              value={fullName}
-              onChangeText={setFullName}
-              autoCapitalize="words"
-              editable={!loading}
-            />
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>الاسم الكامل</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="أدخل اسمك الكامل"
+                placeholderTextColor="#999"
+                value={fullName}
+                onChangeText={setFullName}
+                autoCapitalize="words"
+                editable={!loading}
+              />
+            </View>
+
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>اسم المستخدم</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="username_123"
+                placeholderTextColor="#999"
+                value={username}
+                onChangeText={setUsername}
+                autoCapitalize="none"
+                editable={!loading}
+              />
+            </View>
+
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>كلمة المرور</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="أدخل كلمة المرور"
+                placeholderTextColor="#999"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                editable={!loading}
+              />
+            </View>
+
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+
+            <TouchableOpacity
+              style={[styles.button, loading && styles.buttonDisabled]}
+              onPress={handleSignUp}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.buttonText}>إنشاء حساب</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => router.replace('/(auth)/sign-in')}
+              disabled={loading}
+            >
+              <Text style={styles.link}>لديك حساب بالفعل؟ تسجيل الدخول</Text>
+            </TouchableOpacity>
           </View>
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>اسم المستخدم</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="username_123"
-              placeholderTextColor="#999"
-              value={username}
-              onChangeText={setUsername}
-              autoCapitalize="none"
-              editable={!loading}
-            />
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>كلمة المرور</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="أدخل كلمة المرور"
-              placeholderTextColor="#999"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              editable={!loading}
-            />
-          </View>
-
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleSignUp}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>إنشاء حساب</Text>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => router.replace('/(auth)/sign-in')}
-            disabled={loading}
-          >
-            <Text style={styles.link}>لديك حساب بالفعل؟ تسجيل الدخول</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </Pressable>
     </KeyboardAvoidingView>
   );
 }
@@ -149,6 +157,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     padding: 24,
+    paddingBottom: 40,
   },
   title: {
     fontSize: 36,

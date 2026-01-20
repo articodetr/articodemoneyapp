@@ -9,6 +9,10 @@ import {
   Modal,
   ScrollView,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  Keyboard,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
@@ -381,155 +385,165 @@ function AddCustomerModal({ visible, onClose, onSuccess }: AddCustomerModalProps
   };
 
   return (
-    <View style={styles.modalOverlay}>
-      <View style={styles.modalContent}>
-        <Text style={styles.modalTitle}>إضافة عميل</Text>
+    <KeyboardAvoidingView
+      style={styles.modalOverlay}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+    >
+      <Pressable style={styles.modalOverlay} onPress={Keyboard.dismiss}>
+        <Pressable style={styles.modalContent} onPress={() => {}}>
+          <Text style={styles.modalTitle}>إضافة عميل</Text>
 
-        <View style={styles.tabs}>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'registered' && styles.activeTab]}
-            onPress={() => {
-              setActiveTab('registered');
-              setError('');
-              setSearchResult(null);
-            }}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                activeTab === 'registered' && styles.activeTabText,
-              ]}
+          <View style={styles.tabs}>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'registered' && styles.activeTab]}
+              onPress={() => {
+                setActiveTab('registered');
+                setError('');
+                setSearchResult(null);
+              }}
             >
-              عميل مسجّل
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'local' && styles.activeTab]}
-            onPress={() => {
-              setActiveTab('local');
-              setError('');
-            }}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                activeTab === 'local' && styles.activeTabText,
-              ]}
-            >
-              عميل غير مسجّل
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <ScrollView style={styles.tabContent}>
-          {activeTab === 'registered' ? (
-            <View>
-              <TextInput
-                style={styles.input}
-                placeholder="اسم المستخدم أو رقم الحساب"
-                placeholderTextColor="#999"
-                value={searchInput}
-                onChangeText={setSearchInput}
-              />
-
-              <TouchableOpacity
-                style={[styles.searchButton, searching && styles.buttonDisabled]}
-                onPress={handleSearch}
-                disabled={searching}
+              <Text
+                style={[
+                  styles.tabText,
+                  activeTab === 'registered' && styles.activeTabText,
+                ]}
               >
-                {searching ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.searchButtonText}>بحث</Text>
-                )}
-              </TouchableOpacity>
+                عميل مسجّل
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'local' && styles.activeTab]}
+              onPress={() => {
+                setActiveTab('local');
+                setError('');
+              }}
+            >
+              <Text
+                style={[
+                  styles.tabText,
+                  activeTab === 'local' && styles.activeTabText,
+                ]}
+              >
+                عميل غير مسجّل
+              </Text>
+            </TouchableOpacity>
+          </View>
 
-              {error && <Text style={styles.errorText}>{error}</Text>}
+          <ScrollView
+            style={styles.tabContent}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingBottom: 20 }}
+          >
+            {activeTab === 'registered' ? (
+              <View>
+                <TextInput
+                  style={styles.input}
+                  placeholder="اسم المستخدم أو رقم الحساب"
+                  placeholderTextColor="#999"
+                  value={searchInput}
+                  onChangeText={setSearchInput}
+                />
 
-              {searchResult && (
-                <View style={styles.resultCard}>
-                  <Text style={styles.resultName}>{searchResult.full_name}</Text>
-                  <Text style={styles.resultUsername}>
-                    @{searchResult.username}
-                  </Text>
-                  <View style={styles.resultAccount}>
-                    <Hash color="#666" size={14} />
-                    <Text style={styles.resultAccountText}>
-                      {searchResult.account_number}
+                <TouchableOpacity
+                  style={[styles.searchButton, searching && styles.buttonDisabled]}
+                  onPress={handleSearch}
+                  disabled={searching}
+                >
+                  {searching ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.searchButtonText}>بحث</Text>
+                  )}
+                </TouchableOpacity>
+
+                {error && <Text style={styles.errorText}>{error}</Text>}
+
+                {searchResult && (
+                  <View style={styles.resultCard}>
+                    <Text style={styles.resultName}>{searchResult.full_name}</Text>
+                    <Text style={styles.resultUsername}>
+                      @{searchResult.username}
                     </Text>
+                    <View style={styles.resultAccount}>
+                      <Hash color="#666" size={14} />
+                      <Text style={styles.resultAccountText}>
+                        {searchResult.account_number}
+                      </Text>
+                    </View>
+
+                    <TouchableOpacity
+                      style={[styles.addResultButton, adding && styles.buttonDisabled]}
+                      onPress={handleAddRegistered}
+                      disabled={adding}
+                    >
+                      {adding ? (
+                        <ActivityIndicator color="#fff" />
+                      ) : (
+                        <Text style={styles.addResultButtonText}>إضافة</Text>
+                      )}
+                    </TouchableOpacity>
                   </View>
-
-                  <TouchableOpacity
-                    style={[styles.addResultButton, adding && styles.buttonDisabled]}
-                    onPress={handleAddRegistered}
-                    disabled={adding}
-                  >
-                    {adding ? (
-                      <ActivityIndicator color="#fff" />
-                    ) : (
-                      <Text style={styles.addResultButtonText}>إضافة</Text>
-                    )}
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-          ) : (
-            <View>
-              <TextInput
-                style={styles.input}
-                placeholder="الاسم *"
-                placeholderTextColor="#999"
-                value={localForm.display_name}
-                onChangeText={(text) =>
-                  setLocalForm({ ...localForm, display_name: text })
-                }
-              />
-
-              <TextInput
-                style={styles.input}
-                placeholder="رقم الهاتف"
-                placeholderTextColor="#999"
-                value={localForm.phone}
-                onChangeText={(text) =>
-                  setLocalForm({ ...localForm, phone: text })
-                }
-                keyboardType="phone-pad"
-              />
-
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                placeholder="ملاحظة"
-                placeholderTextColor="#999"
-                value={localForm.note}
-                onChangeText={(text) =>
-                  setLocalForm({ ...localForm, note: text })
-                }
-                multiline
-                numberOfLines={3}
-              />
-
-              {error && <Text style={styles.errorText}>{error}</Text>}
-
-              <TouchableOpacity
-                style={[styles.addButton2, adding && styles.buttonDisabled]}
-                onPress={handleAddLocal}
-                disabled={adding}
-              >
-                {adding ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.addButton2Text}>إضافة</Text>
                 )}
-              </TouchableOpacity>
-            </View>
-          )}
-        </ScrollView>
+              </View>
+            ) : (
+              <View>
+                <TextInput
+                  style={styles.input}
+                  placeholder="الاسم *"
+                  placeholderTextColor="#999"
+                  value={localForm.display_name}
+                  onChangeText={(text) =>
+                    setLocalForm({ ...localForm, display_name: text })
+                  }
+                />
 
-        <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-          <Text style={styles.closeButtonText}>إغلاق</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+                <TextInput
+                  style={styles.input}
+                  placeholder="رقم الهاتف"
+                  placeholderTextColor="#999"
+                  value={localForm.phone}
+                  onChangeText={(text) =>
+                    setLocalForm({ ...localForm, phone: text })
+                  }
+                  keyboardType="phone-pad"
+                />
+
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  placeholder="ملاحظة"
+                  placeholderTextColor="#999"
+                  value={localForm.note}
+                  onChangeText={(text) =>
+                    setLocalForm({ ...localForm, note: text })
+                  }
+                  multiline
+                  numberOfLines={3}
+                />
+
+                {error && <Text style={styles.errorText}>{error}</Text>}
+
+                <TouchableOpacity
+                  style={[styles.addButton2, adding && styles.buttonDisabled]}
+                  onPress={handleAddLocal}
+                  disabled={adding}
+                >
+                  {adding ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.addButton2Text}>إضافة</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
+          </ScrollView>
+
+          <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+            <Text style={styles.closeButtonText}>إغلاق</Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </KeyboardAvoidingView>
   );
 }
 

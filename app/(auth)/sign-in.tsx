@@ -9,6 +9,8 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
+  Pressable,
+  Keyboard,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
@@ -50,60 +52,66 @@ export default function SignIn() {
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.content}>
-          <Text style={styles.title}>الطرف</Text>
-          <Text style={styles.subtitle}>تسجيل الدخول</Text>
+      <Pressable style={{ flex: 1 }} onPress={Keyboard.dismiss}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.content}>
+            <Text style={styles.title}>الطرف</Text>
+            <Text style={styles.subtitle}>تسجيل الدخول</Text>
 
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>اسم المستخدم</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="username_123"
-              placeholderTextColor="#999"
-              value={username}
-              onChangeText={setUsername}
-              autoCapitalize="none"
-              editable={!loading}
-            />
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>اسم المستخدم</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="username_123"
+                placeholderTextColor="#999"
+                value={username}
+                onChangeText={setUsername}
+                autoCapitalize="none"
+                editable={!loading}
+              />
+            </View>
+
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>كلمة المرور</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="أدخل كلمة المرور"
+                placeholderTextColor="#999"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                editable={!loading}
+              />
+            </View>
+
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+
+            <TouchableOpacity
+              style={[styles.button, loading && styles.buttonDisabled]}
+              onPress={handleSignIn}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.buttonText}>تسجيل الدخول</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => router.replace('/(auth)/sign-up')}
+              disabled={loading}
+            >
+              <Text style={styles.link}>ليس لديك حساب؟ إنشاء حساب جديد</Text>
+            </TouchableOpacity>
           </View>
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>كلمة المرور</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="أدخل كلمة المرور"
-              placeholderTextColor="#999"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              editable={!loading}
-            />
-          </View>
-
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleSignIn}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>تسجيل الدخول</Text>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => router.replace('/(auth)/sign-up')}
-            disabled={loading}
-          >
-            <Text style={styles.link}>ليس لديك حساب؟ إنشاء حساب جديد</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </Pressable>
     </KeyboardAvoidingView>
   );
 }
@@ -120,6 +128,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     padding: 24,
+    paddingBottom: 40,
   },
   title: {
     fontSize: 36,
