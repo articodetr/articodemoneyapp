@@ -18,20 +18,7 @@ interface ReceiptData {
   commission?: number;
 }
 
-const QR_CODE_PLACEHOLDER = `data:image/svg+xml;base64,${btoa(`
-  <svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120">
-    <rect width="120" height="120" fill="white"/>
-    <rect x="10" y="10" width="20" height="20" fill="black"/>
-    <rect x="40" y="10" width="20" height="20" fill="black"/>
-    <rect x="70" y="10" width="20" height="20" fill="black"/>
-    <rect x="10" y="40" width="20" height="20" fill="black"/>
-    <rect x="40" y="40" width="20" height="20" fill="black"/>
-    <rect x="70" y="40" width="20" height="20" fill="black"/>
-    <rect x="10" y="70" width="20" height="20" fill="black"/>
-    <rect x="40" y="70" width="20" height="20" fill="black"/>
-    <rect x="70" y="70" width="20" height="20" fill="black"/>
-  </svg>
-`)}`;
+const QR_CODE_PLACEHOLDER = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Crect width='120' height='120' fill='white'/%3E%3Crect x='10' y='10' width='20' height='20' fill='black'/%3E%3Crect x='40' y='10' width='20' height='20' fill='black'/%3E%3Crect x='70' y='10' width='20' height='20' fill='black'/%3E%3Crect x='10' y='40' width='20' height='20' fill='black'/%3E%3Crect x='40' y='40' width='20' height='20' fill='black'/%3E%3Crect x='70' y='40' width='20' height='20' fill='black'/%3E%3Crect x='10' y='70' width='20' height='20' fill='black'/%3E%3Crect x='40' y='70' width='20' height='20' fill='black'/%3E%3Crect x='70' y='70' width='20' height='20' fill='black'/%3E%3C/svg%3E`;
 
 export async function generateAndShareReceipt(
   receiptData: ReceiptData,
