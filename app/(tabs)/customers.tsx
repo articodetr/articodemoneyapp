@@ -198,11 +198,21 @@ export default function CustomersScreen() {
       }
 
       // Sort customers by last activity (most recent first)
-      customersWithBalances.sort((a, b) => {
-        const aDate = a.last_activity_date || a.created_at;
-        const bDate = b.last_activity_date || b.created_at;
-        return new Date(bDate).getTime() - new Date(aDate).getTime();
-      });
+      try {
+        const getDateTimestamp = (dateStr: string | undefined): number => {
+          if (!dateStr) return 0;
+          const timestamp = new Date(dateStr).getTime();
+          return isNaN(timestamp) ? 0 : timestamp;
+        };
+
+        customersWithBalances.sort((a, b) => {
+          const aDate = a.last_activity_date || a.created_at;
+          const bDate = b.last_activity_date || b.created_at;
+          return getDateTimestamp(bDate) - getDateTimestamp(aDate);
+        });
+      } catch (error) {
+        console.error('Error sorting customers:', error);
+      }
 
       setCustomers(customersWithBalances);
     } catch (error) {
