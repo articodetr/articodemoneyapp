@@ -39,9 +39,21 @@ export default function CustomersScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
+    console.log('[Customers] Component mounted, loading customers...');
     loadCustomers();
+
+    // Safety timeout: if loading takes more than 15 seconds, stop loading
+    const timeoutId = setTimeout(() => {
+      console.log('[Customers] Timeout reached, forcing isLoading to false');
+      setIsLoading(false);
+    }, 15000);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
   }, []);
 
   useEffect(() => {
@@ -57,13 +69,24 @@ export default function CustomersScreen() {
 
   const loadCustomers = async () => {
     try {
-      const { data: currentUser } = await supabase.auth.getUser();
-      if (!currentUser.user) {
+      console.log('[Customers] Starting loadCustomers...');
+      const { data: currentUser, error: userError } = await supabase.auth.getUser();
+
+      if (userError) {
+        console.error('[Customers] Auth error:', userError);
         setCustomers([]);
         setIsLoading(false);
         return;
       }
 
+      if (!currentUser.user) {
+        console.log('[Customers] No user found');
+        setCustomers([]);
+        setIsLoading(false);
+        return;
+      }
+
+      console.log('[Customers] Loading user customers...');
       // Load user's customer list
       const { data: userCustomersData, error: userCustomersError } = await supabase
         .from('user_customers')
@@ -77,13 +100,19 @@ export default function CustomersScreen() {
         .eq('owner_id', currentUser.user.id)
         .order('created_at', { ascending: false }) as any;
 
-      if (userCustomersError) throw userCustomersError;
+      if (userCustomersError) {
+        console.error('[Customers] Error loading user customers:', userCustomersError);
+        throw userCustomersError;
+      }
 
       if (!userCustomersData || userCustomersData.length === 0) {
+        console.log('[Customers] No user customers found');
         setCustomers([]);
         setIsLoading(false);
         return;
       }
+
+      console.log('[Customers] Found', userCustomersData.length, 'user customers');
 
       // Extract IDs for batch loading
       const registeredUserIds = userCustomersData
@@ -93,6 +122,11 @@ export default function CustomersScreen() {
       const localCustomerIds = userCustomersData
         .filter((uc: any) => uc.kind === 'local' && uc.local_customer_id)
         .map((uc: any) => uc.local_customer_id);
+
+      console.log('[Customers] Loading profiles and local customers...', {
+        registeredUserIds: registeredUserIds.length,
+        localCustomerIds: localCustomerIds.length,
+      });
 
       // Batch load profiles and local customers
       const [profilesResult, localCustomersResult] = await Promise.all([
@@ -110,6 +144,13 @@ export default function CustomersScreen() {
           : Promise.resolve({ data: [], error: null }),
       ]);
 
+      if (profilesResult.error) {
+        console.error('[Customers] Error loading profiles:', profilesResult.error);
+      }
+      if (localCustomersResult.error) {
+        console.error('[Customers] Error loading local customers:', localCustomersResult.error);
+      }
+
       // Create lookup maps for fast access
       const profilesMap = new Map(
         (profilesResult.data || []).map((p: any) => [p.id, p])
@@ -121,11 +162,19 @@ export default function CustomersScreen() {
       // Load all movements for these customers
       const userCustomerIds = userCustomersData.map((uc: any) => uc.id);
 
-      const { data: movements } = await supabase
+      console.log('[Customers] Loading movements for', userCustomerIds.length, 'customers');
+
+      const { data: movements, error: movementsError } = await supabase
         .from('customer_movements')
         .select('user_customer_id, currency, signed_amount, created_at')
         .in('user_customer_id', userCustomerIds)
         .order('created_at', { ascending: false });
+
+      if (movementsError) {
+        console.error('[Customers] Error loading movements:', movementsError);
+      }
+
+      console.log('[Customers] Loaded', movements?.length || 0, 'movements');
 
       // Calculate balances per customer per currency
       const balancesMap = new Map<string, Map<string, number>>();
@@ -214,11 +263,20 @@ export default function CustomersScreen() {
         console.error('Error sorting customers:', error);
       }
 
+      console.log('[Customers] Final customer count:', customersWithBalances.length);
       setCustomers(customersWithBalances);
-    } catch (error) {
-      console.error('Error loading customers:', error);
+      setLoadError(null);
+      console.log('[Customers] Customers set successfully');
+    } catch (error: any) {
+      console.error('[Customers] Error loading customers:', error);
+      console.error('[Customers] Error details:', error?.message, error?.code);
+      const errorMessage = error?.message || 'خطأ غير معروف';
+      setLoadError(`فشل تحميل العملاء: ${errorMessage}`);
+      setCustomers([]);
     } finally {
+      console.log('[Customers] Setting isLoading to false');
       setIsLoading(false);
+      console.log('[Customers] loadCustomers completed');
     }
   };
 
@@ -352,9 +410,24 @@ export default function CustomersScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>
-              {isLoading ? 'جاري التحميل...' : 'لا يوجد عملاء'}
-            </Text>
+            {loadError ? (
+              <>
+                <Text style={styles.errorText}>{loadError}</Text>
+                <TouchableOpacity
+                  style={styles.retryButton}
+                  onPress={() => {
+                    setIsLoading(true);
+                    loadCustomers();
+                  }}
+                >
+                  <Text style={styles.retryButtonText}>إعادة المحاولة</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <Text style={styles.emptyText}>
+                {isLoading ? 'جاري التحميل...' : 'لا يوجد عملاء'}
+              </Text>
+            )}
           </View>
         }
       />
@@ -466,6 +539,24 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 16,
     color: '#9CA3AF',
+  },
+  errorText: {
+    fontSize: 14,
+    color: '#EF4444',
+    textAlign: 'center',
+    marginBottom: 16,
+    paddingHorizontal: 20,
+  },
+  retryButton: {
+    backgroundColor: '#10B981',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
   floatingButton: {
     position: 'absolute',
