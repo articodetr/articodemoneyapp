@@ -195,8 +195,71 @@ export interface Database {
           created_at?: string
         }
       }
+      local_customers: {
+        Row: {
+          id: string
+          owner_id: string
+          display_name: string
+          phone: string | null
+          note: string | null
+          local_account_number: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          owner_id: string
+          display_name: string
+          phone?: string | null
+          note?: string | null
+          local_account_number?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          owner_id?: string
+          display_name?: string
+          phone?: string | null
+          note?: string | null
+          local_account_number?: number
+          created_at?: string
+        }
+      }
+      user_customers: {
+        Row: {
+          id: string
+          owner_id: string
+          kind: 'registered' | 'local'
+          registered_user_id: string | null
+          local_customer_id: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          owner_id: string
+          kind: 'registered' | 'local'
+          registered_user_id?: string | null
+          local_customer_id?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          owner_id?: string
+          kind?: 'registered' | 'local'
+          registered_user_id?: string | null
+          local_customer_id?: string | null
+          created_at?: string
+        }
+      }
     }
     Views: {
+      search_profiles: {
+        Row: {
+          id: string
+          username: string
+          full_name: string
+          account_number: number
+        }
+      }
       customer_balances: {
         Row: {
           customer_id: string

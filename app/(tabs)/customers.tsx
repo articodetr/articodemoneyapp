@@ -10,12 +10,17 @@ import {
   Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Plus, Search, TrendingUp } from 'lucide-react-native';
+import { Plus, Search } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { Customer, CustomerBalanceByCurrency, CURRENCIES } from '@/types/database';
 import { useDataRefresh } from '@/contexts/DataRefreshContext';
 
-interface CustomerWithBalances extends Customer {
+interface CustomerWithBalances {
+  id: string;
+  name: string;
+  phone: string;
+  account_number?: number;
+  kind: 'registered' | 'local';
   balances: CustomerBalanceByCurrency[];
 }
 
@@ -45,17 +50,69 @@ export default function CustomersScreen() {
 
   const loadCustomers = async () => {
     try {
-      const { data: customersData, error: customersError } = await supabase
-        .from('customers')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const { data: currentUser } = await supabase.auth.getUser();
+      if (!currentUser.user) {
+        setCustomers([]);
+        setIsLoading(false);
+        return;
+      }
 
-      if (customersError) throw customersError;
+      // Load user's customer list
+      const { data: userCustomersData, error: userCustomersError } = await supabase
+        .from('user_customers')
+        .select(`
+          id,
+          kind,
+          registered_user_id,
+          local_customer_id,
+          created_at
+        `)
+        .eq('owner_id', currentUser.user.id)
+        .order('created_at', { ascending: false }) as any;
 
-      const customersWithBalances: CustomerWithBalances[] = (customersData || []).map((customer) => ({
-        ...customer,
-        balances: [],
-      }));
+      if (userCustomersError) throw userCustomersError;
+
+      const customersWithBalances: CustomerWithBalances[] = [];
+
+      for (const userCustomer of userCustomersData || []) {
+        if (userCustomer.kind === 'registered' && userCustomer.registered_user_id) {
+          // Load registered user profile
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('id, full_name, account_number')
+            .eq('id', userCustomer.registered_user_id)
+            .maybeSingle() as any;
+
+          if (profile) {
+            customersWithBalances.push({
+              id: profile.id,
+              name: profile.full_name,
+              phone: '',
+              account_number: profile.account_number,
+              kind: 'registered',
+              balances: [],
+            });
+          }
+        } else if (userCustomer.kind === 'local' && userCustomer.local_customer_id) {
+          // Load local customer
+          const { data: localCustomer } = await supabase
+            .from('local_customers')
+            .select('id, display_name, phone, local_account_number')
+            .eq('id', userCustomer.local_customer_id)
+            .maybeSingle() as any;
+
+          if (localCustomer) {
+            customersWithBalances.push({
+              id: localCustomer.id,
+              name: localCustomer.display_name,
+              phone: localCustomer.phone || '',
+              account_number: localCustomer.local_account_number,
+              kind: 'local',
+              balances: [],
+            });
+          }
+        }
+      }
 
       setCustomers(customersWithBalances);
     } catch (error) {
@@ -104,11 +161,6 @@ export default function CustomersScreen() {
   };
 
   const handleCustomerLongPress = (customer: CustomerWithBalances) => {
-    if (customer.is_profit_loss_account) {
-      Alert.alert('حساب الأرباح والخسائر', 'هذا حساب النظام ولا يمكن حذفه أو تصفيره.');
-      return;
-    }
-
     Alert.alert('خيارات العميل', `اختر العملية لـ ${customer.name}:`, [
       { text: 'إلغاء', style: 'cancel' },
       {
@@ -121,31 +173,23 @@ export default function CustomersScreen() {
   const renderCustomer = ({ item, index }: { item: CustomerWithBalances; index: number }) => {
     const hasBalances = item.balances.length > 0;
     const displayBalances = item.balances.slice(0, 2);
-    const isProfitLoss = item.is_profit_loss_account;
 
     return (
       <TouchableOpacity
-        style={[
-          styles.customerCard,
-          isProfitLoss && styles.profitLossCard,
-        ]}
+        style={styles.customerCard}
         onPress={() => router.push(`/customer/${item.id}` as any)}
         onLongPress={() => handleCustomerLongPress(item)}
       >
-        {isProfitLoss ? (
-          <View style={[styles.avatar, styles.profitLossAvatar]}>
-            <TrendingUp size={28} color="#FFFFFF" />
-          </View>
-        ) : (
-          <View style={[styles.avatar, { backgroundColor: getAvatarColor(index) }]}>
-            <Text style={styles.avatarText}>{getInitials(item.name)}</Text>
-          </View>
-        )}
+        <View style={[styles.avatar, { backgroundColor: getAvatarColor(index) }]}>
+          <Text style={styles.avatarText}>{getInitials(item.name)}</Text>
+        </View>
 
-        <Text style={[styles.customerName, isProfitLoss && styles.profitLossName]}>
-          {item.name}
-          {isProfitLoss && ' 💰'}
-        </Text>
+        <View style={styles.customerInfo}>
+          <Text style={styles.customerName}>{item.name}</Text>
+          {item.account_number && (
+            <Text style={styles.accountNumber}>#{item.account_number}</Text>
+          )}
+        </View>
 
         <View style={styles.balanceContainer}>
           {!hasBalances ? (
@@ -217,7 +261,7 @@ export default function CustomersScreen() {
 
       <TouchableOpacity
         style={styles.floatingButton}
-        onPress={() => router.push('/add-customer' as any)}
+        onPress={() => router.push('/(modals)/add-customer' as any)}
       >
         <Plus size={28} color="#FFFFFF" />
       </TouchableOpacity>
@@ -278,18 +322,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
-  profitLossCard: {
-    backgroundColor: '#FEF3C7',
-    borderWidth: 2,
-    borderColor: '#F59E0B',
-  },
-  profitLossAvatar: {
-    backgroundColor: '#F59E0B',
-  },
-  profitLossName: {
-    fontWeight: 'bold',
-    color: '#92400E',
-  },
   avatar: {
     width: 56,
     height: 56,
@@ -302,11 +334,20 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#FFFFFF',
   },
-  customerName: {
+  customerInfo: {
     flex: 1,
+    alignItems: 'flex-end',
+  },
+  customerName: {
     fontSize: 17,
+    fontWeight: '600',
     color: '#111827',
     textAlign: 'right',
+  },
+  accountNumber: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginTop: 2,
   },
   balanceContainer: {
     alignItems: 'flex-start',
