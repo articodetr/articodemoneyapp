@@ -72,21 +72,55 @@ export default function CustomersScreen() {
 
       if (userCustomersError) throw userCustomersError;
 
+      if (!userCustomersData || userCustomersData.length === 0) {
+        setCustomers([]);
+        setIsLoading(false);
+        return;
+      }
+
+      // Extract IDs for batch loading
+      const registeredUserIds = userCustomersData
+        .filter((uc: any) => uc.kind === 'registered' && uc.registered_user_id)
+        .map((uc: any) => uc.registered_user_id);
+
+      const localCustomerIds = userCustomersData
+        .filter((uc: any) => uc.kind === 'local' && uc.local_customer_id)
+        .map((uc: any) => uc.local_customer_id);
+
+      // Batch load profiles and local customers
+      const [profilesResult, localCustomersResult] = await Promise.all([
+        registeredUserIds.length > 0
+          ? supabase
+              .from('profiles')
+              .select('id, full_name, account_number')
+              .in('id', registeredUserIds)
+          : Promise.resolve({ data: [], error: null }),
+        localCustomerIds.length > 0
+          ? supabase
+              .from('local_customers')
+              .select('id, display_name, phone, local_account_number')
+              .in('id', localCustomerIds)
+          : Promise.resolve({ data: [], error: null }),
+      ]);
+
+      // Create lookup maps for fast access
+      const profilesMap = new Map(
+        (profilesResult.data || []).map((p: any) => [p.id, p])
+      );
+      const localCustomersMap = new Map(
+        (localCustomersResult.data || []).map((lc: any) => [lc.id, lc])
+      );
+
+      // Build customer list maintaining original order
       const customersWithBalances: CustomerWithBalances[] = [];
 
-      for (const userCustomer of userCustomersData || []) {
+      for (const userCustomer of userCustomersData) {
         if (userCustomer.kind === 'registered' && userCustomer.registered_user_id) {
-          // Load registered user profile
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('id, full_name, account_number')
-            .eq('id', userCustomer.registered_user_id)
-            .maybeSingle() as any;
-
+          const profile = profilesMap.get(userCustomer.registered_user_id);
           if (profile) {
             customersWithBalances.push({
               id: profile.id,
-              name: profile.full_name,
+              name: profile.full_name || 'بدون اسم',
               phone: '',
               account_number: profile.account_number,
               kind: 'registered',
@@ -94,17 +128,11 @@ export default function CustomersScreen() {
             });
           }
         } else if (userCustomer.kind === 'local' && userCustomer.local_customer_id) {
-          // Load local customer
-          const { data: localCustomer } = await supabase
-            .from('local_customers')
-            .select('id, display_name, phone, local_account_number')
-            .eq('id', userCustomer.local_customer_id)
-            .maybeSingle() as any;
-
+          const localCustomer = localCustomersMap.get(userCustomer.local_customer_id);
           if (localCustomer) {
             customersWithBalances.push({
               id: localCustomer.id,
-              name: localCustomer.display_name,
+              name: localCustomer.display_name || 'بدون اسم',
               phone: localCustomer.phone || '',
               account_number: localCustomer.local_account_number,
               kind: 'local',
@@ -165,7 +193,7 @@ export default function CustomersScreen() {
       { text: 'إلغاء', style: 'cancel' },
       {
         text: 'فتح',
-        onPress: () => router.push(`/customer/${customer.id}` as any),
+        onPress: () => router.push(`/customer/${customer.id}?kind=${customer.kind}` as any),
       },
     ]);
   };
@@ -177,7 +205,7 @@ export default function CustomersScreen() {
     return (
       <TouchableOpacity
         style={styles.customerCard}
-        onPress={() => router.push(`/customer/${item.id}` as any)}
+        onPress={() => router.push(`/customer/${item.id}?kind=${item.kind}` as any)}
         onLongPress={() => handleCustomerLongPress(item)}
       >
         <View style={[styles.avatar, { backgroundColor: getAvatarColor(index) }]}>

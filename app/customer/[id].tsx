@@ -182,7 +182,7 @@ function getRelatedCommission(
 
 export default function CustomerDetailsScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams();
+  const { id, kind } = useLocalSearchParams();
   const { lastRefreshTime } = useDataRefresh();
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [movements, setMovements] = useState<AccountMovement[]>([]);
@@ -196,31 +196,74 @@ export default function CustomerDetailsScreen() {
 
   const loadCustomerData = useCallback(async () => {
     try {
-      const [customerResult, movementsResult] = await Promise.all([
-        supabase.from('customers').select('*').eq('id', id).maybeSingle(),
-        supabase
-          .from('account_movements')
-          .select('*, is_internal_transfer, transfer_group_id, is_commission_movement, related_commission_movement_id')
-          .eq('customer_id', id)
-          .order('created_at', { ascending: false }),
-      ]);
+      const customerKind = (kind as string) || 'local';
+      let customerData = null;
 
-      if (customerResult.error || !customerResult.data) {
-        Alert.alert('خطأ', 'لم يتم العثور على العميل');
-        router.back();
-        return;
+      if (customerKind === 'registered') {
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('id, full_name, account_number, phone')
+          .eq('id', id)
+          .maybeSingle();
+
+        if (error || !profile) {
+          Alert.alert('خطأ', 'لم يتم العثور على العميل');
+          router.back();
+          return;
+        }
+
+        customerData = {
+          id: profile.id,
+          name: profile.full_name || 'بدون اسم',
+          phone: profile.phone || '',
+          account_number: profile.account_number,
+          notes: '',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          user_id: '',
+        };
+      } else {
+        const { data: localCustomer, error } = await supabase
+          .from('local_customers')
+          .select('id, display_name, phone, local_account_number')
+          .eq('id', id)
+          .maybeSingle();
+
+        if (error || !localCustomer) {
+          Alert.alert('خطأ', 'لم يتم العثور على العميل');
+          router.back();
+          return;
+        }
+
+        customerData = {
+          id: localCustomer.id,
+          name: localCustomer.display_name || 'بدون اسم',
+          phone: localCustomer.phone || '',
+          account_number: localCustomer.local_account_number,
+          notes: '',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          user_id: '',
+        };
       }
 
-      setCustomer(customerResult.data);
-      setMovements(movementsResult.data || []);
+      setCustomer(customerData as Customer);
+
+      const { data: movementsData } = await supabase
+        .from('account_movements')
+        .select('*, is_internal_transfer, transfer_group_id, is_commission_movement, related_commission_movement_id')
+        .eq('customer_id', id)
+        .order('created_at', { ascending: false });
+
+      setMovements(movementsData || []);
 
       const incoming =
-        movementsResult.data
+        movementsData
           ?.filter((m) => m.movement_type === 'incoming')
           .reduce((sum, m) => sum + Number(m.amount), 0) || 0;
 
       const outgoing =
-        movementsResult.data
+        movementsData
           ?.filter((m) => m.movement_type === 'outgoing')
           .reduce((sum, m) => sum + Number(m.amount), 0) || 0;
 
@@ -232,7 +275,7 @@ export default function CustomerDetailsScreen() {
     } finally {
       setIsLoading(false);
     }
-  }, [id]);
+  }, [id, kind]);
 
   useFocusEffect(
     useCallback(() => {
@@ -310,12 +353,10 @@ export default function CustomerDetailsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const { data, error } = await supabase.rpc(
-                'reset_customer_account',
-                {
-                  p_customer_id: id,
-                },
-              );
+              const { error } = await supabase
+                .from('account_movements')
+                .delete()
+                .eq('customer_id', id);
 
               if (error) {
                 Alert.alert('خطأ', 'حدث خطأ أثناء تصفير الحساب');
@@ -323,28 +364,18 @@ export default function CustomerDetailsScreen() {
                 return;
               }
 
-              const result = data as {
-                success: boolean;
-                message: string;
-                movements_deleted: number;
-              };
-
-              if (result.success) {
-                Alert.alert(
-                  'نجح',
-                  `تم تصفير الحساب بنجاح\nتم حذف ${result.movements_deleted} حركة`,
-                  [
-                    {
-                      text: 'حسناً',
-                      onPress: () => {
-                        loadCustomerData();
-                      },
+              Alert.alert(
+                'نجح',
+                `تم تصفير الحساب بنجاح\nتم حذف ${movements.length} حركة`,
+                [
+                  {
+                    text: 'حسناً',
+                    onPress: () => {
+                      loadCustomerData();
                     },
-                  ],
-                );
-              } else {
-                Alert.alert('خطأ', result.message);
-              }
+                  },
+                ],
+              );
             } catch (error) {
               console.error('Error resetting account:', error);
               Alert.alert('خطأ', 'حدث خطأ غير متوقع');
@@ -355,7 +386,7 @@ export default function CustomerDetailsScreen() {
     );
   };
 
-  const handleDeleteCustomer = () => {
+  const handleDeleteCustomer = async () => {
     if (!customer) return;
 
     const balances = calculateBalanceByCurrency(movements);
@@ -395,39 +426,50 @@ export default function CustomerDetailsScreen() {
               style: 'destructive',
               onPress: async () => {
                 try {
-                  const { data, error } = await supabase.rpc(
-                    'delete_customer_completely',
-                    {
-                      p_customer_id: id,
-                    },
-                  );
+                  const customerKind = (kind as string) || 'local';
+                  const { data: currentUser } = await supabase.auth.getUser();
 
-                  if (error) {
-                    Alert.alert('خطأ', 'حدث خطأ أثناء حذف العميل');
-                    console.error('Error deleting customer:', error);
+                  if (!currentUser.user) {
+                    Alert.alert('خطأ', 'لم يتم العثور على المستخدم');
                     return;
                   }
 
-                  const result = data as {
-                    success: boolean;
-                    message: string;
-                    movements_deleted: number;
-                  };
+                  await supabase
+                    .from('account_movements')
+                    .delete()
+                    .eq('customer_id', id);
 
-                  if (result.success) {
-                    Alert.alert(
-                      'تم الحذف',
-                      `تم حذف العميل بنجاح\nتم حذف ${result.movements_deleted} حركة`,
-                      [
-                        {
-                          text: 'حسناً',
-                          onPress: () => router.back(),
-                        },
-                      ],
-                    );
+                  if (customerKind === 'registered') {
+                    await supabase
+                      .from('user_customers')
+                      .delete()
+                      .eq('registered_user_id', id)
+                      .eq('owner_id', currentUser.user.id);
                   } else {
-                    Alert.alert('خطأ', result.message);
+                    const { error: deleteError } = await supabase
+                      .from('local_customers')
+                      .delete()
+                      .eq('id', id);
+
+                    if (!deleteError) {
+                      await supabase
+                        .from('user_customers')
+                        .delete()
+                        .eq('local_customer_id', id)
+                        .eq('owner_id', currentUser.user.id);
+                    }
                   }
+
+                  Alert.alert(
+                    'تم الحذف',
+                    `تم حذف العميل بنجاح\nتم حذف ${movements.length} حركة`,
+                    [
+                      {
+                        text: 'حسناً',
+                        onPress: () => router.back(),
+                      },
+                    ],
+                  );
                 } catch (error) {
                   console.error('Error deleting customer:', error);
                   Alert.alert('خطأ', 'حدث خطأ غير متوقع');
