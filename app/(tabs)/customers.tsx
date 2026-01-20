@@ -27,6 +27,8 @@ interface CustomerWithBalances {
   account_number?: number;
   kind: 'registered' | 'local';
   balances: CustomerBalance[];
+  last_activity_date?: string;
+  created_at: string;
 }
 
 export default function CustomersScreen() {
@@ -121,13 +123,16 @@ export default function CustomersScreen() {
 
       const { data: movements } = await supabase
         .from('customer_movements')
-        .select('user_customer_id, currency, signed_amount')
-        .in('user_customer_id', userCustomerIds);
+        .select('user_customer_id, currency, signed_amount, created_at')
+        .in('user_customer_id', userCustomerIds)
+        .order('created_at', { ascending: false });
 
       // Calculate balances per customer per currency
       const balancesMap = new Map<string, Map<string, number>>();
+      const lastActivityMap = new Map<string, string>();
 
       movements?.forEach((m: any) => {
+        // Track balances
         if (!balancesMap.has(m.user_customer_id)) {
           balancesMap.set(m.user_customer_id, new Map());
         }
@@ -136,6 +141,11 @@ export default function CustomersScreen() {
           m.currency,
           (customerBalances.get(m.currency) || 0) + Number(m.signed_amount)
         );
+
+        // Track last activity date (first occurrence is the latest due to ordering)
+        if (!lastActivityMap.has(m.user_customer_id)) {
+          lastActivityMap.set(m.user_customer_id, m.created_at);
+        }
       });
 
       // Build customer list maintaining original order
@@ -166,6 +176,8 @@ export default function CustomersScreen() {
               account_number: profile.account_number,
               kind: 'registered',
               balances: customerBalances,
+              last_activity_date: lastActivityMap.get(userCustomer.id),
+              created_at: userCustomer.created_at,
             });
           }
         } else if (userCustomer.kind === 'local' && userCustomer.local_customer_id) {
@@ -178,10 +190,19 @@ export default function CustomersScreen() {
               account_number: localCustomer.local_account_number,
               kind: 'local',
               balances: customerBalances,
+              last_activity_date: lastActivityMap.get(userCustomer.id),
+              created_at: userCustomer.created_at,
             });
           }
         }
       }
+
+      // Sort customers by last activity (most recent first)
+      customersWithBalances.sort((a, b) => {
+        const aDate = a.last_activity_date || a.created_at;
+        const bDate = b.last_activity_date || b.created_at;
+        return new Date(bDate).getTime() - new Date(aDate).getTime();
+      });
 
       setCustomers(customersWithBalances);
     } catch (error) {
