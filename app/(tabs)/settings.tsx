@@ -1,112 +1,45 @@
-import { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
-  Modal,
-  TextInput,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   LogOut,
-  Lock,
   User,
   DollarSign,
-  Info,
-  ChevronRight,
 } from 'lucide-react-native';
 
 export default function SettingsScreen() {
-  const { user, profile, signOut, setPin } = useAuth();
+  const { profile, signOut } = useAuth();
   const router = useRouter();
-  const [pinModalVisible, setPinModalVisible] = useState(false);
-  const [newPin, setNewPin] = useState('');
-  const [confirmPin, setConfirmPin] = useState('');
 
-  const handleSignOut = () => {
-    Alert.alert('تسجيل الخروج', 'هل أنت متأكد من تسجيل الخروج؟', [
-      { text: 'إلغاء', style: 'cancel' },
-      {
-        text: 'تسجيل الخروج',
-        style: 'destructive',
-        onPress: async () => {
-          await signOut();
-          router.replace('/(auth)/sign-in');
-        },
-      },
-    ]);
-  };
-
-  const handleChangePin = () => {
-    if (newPin.length !== 4) {
-      Alert.alert('خطأ', 'رمز PIN يجب أن يكون 4 أرقام');
-      return;
-    }
-
-    if (newPin !== confirmPin) {
-      Alert.alert('خطأ', 'رموز PIN غير متطابقة');
-      return;
-    }
-
-    setPin(newPin);
-    setPinModalVisible(false);
-    setNewPin('');
-    setConfirmPin('');
-    Alert.alert('نجح', 'تم تغيير رمز PIN بنجاح');
+  const handleSignOut = async () => {
+    await signOut();
+    router.replace('/(auth)/sign-in');
   };
 
   const settingsSections = [
     {
-      title: 'الحساب',
+      title: 'معلومات الحساب',
       items: [
         {
           icon: <User color="#007AFF" size={20} />,
           label: 'الاسم',
-          value: profile?.full_name,
-          onPress: () => {},
+          value: profile?.full_name || '',
         },
         {
           icon: <User color="#007AFF" size={20} />,
           label: 'اسم المستخدم',
-          value: profile?.username,
-          onPress: () => {},
+          value: profile?.username || '',
         },
         {
           icon: <DollarSign color="#007AFF" size={20} />,
           label: 'رقم الحساب',
-          value: profile?.account_number.toString(),
-          onPress: () => {},
-        },
-        {
-          icon: <Lock color="#007AFF" size={20} />,
-          label: 'تغيير رمز PIN',
-          onPress: () => setPinModalVisible(true),
-        },
-      ],
-    },
-    {
-      title: 'الإعدادات',
-      items: [
-        {
-          icon: <DollarSign color="#007AFF" size={20} />,
-          label: 'العملات',
-          value: 'إدارة العملات',
-          onPress: () => {},
-        },
-      ],
-    },
-    {
-      title: 'معلومات',
-      items: [
-        {
-          icon: <Info color="#007AFF" size={20} />,
-          label: 'عن التطبيق',
-          value: 'الإصدار 1.0.0',
-          onPress: () => {},
+          value: profile?.account_number.toString() || '',
         },
       ],
     },
@@ -134,10 +67,9 @@ export default function SettingsScreen() {
         <View key={sectionIndex} style={styles.section}>
           <Text style={styles.sectionTitle}>{section.title}</Text>
           {section.items.map((item, itemIndex) => (
-            <TouchableOpacity
+            <View
               key={itemIndex}
               style={styles.settingItem}
-              onPress={item.onPress}
             >
               <View style={styles.settingLeft}>
                 <View style={styles.settingIcon}>{item.icon}</View>
@@ -148,8 +80,7 @@ export default function SettingsScreen() {
                   )}
                 </View>
               </View>
-              <ChevronRight color="#ccc" size={20} />
-            </TouchableOpacity>
+            </View>
           ))}
         </View>
       ))}
@@ -158,58 +89,6 @@ export default function SettingsScreen() {
         <LogOut color="#fff" size={20} />
         <Text style={styles.logoutText}>تسجيل الخروج</Text>
       </TouchableOpacity>
-
-      <Modal
-        visible={pinModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setPinModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>تغيير رمز PIN</Text>
-
-            <TextInput
-              style={styles.input}
-              placeholder="رمز PIN الجديد (4 أرقام)"
-              value={newPin}
-              onChangeText={setNewPin}
-              keyboardType="number-pad"
-              maxLength={4}
-              secureTextEntry
-            />
-
-            <TextInput
-              style={styles.input}
-              placeholder="تأكيد رمز PIN"
-              value={confirmPin}
-              onChangeText={setConfirmPin}
-              keyboardType="number-pad"
-              maxLength={4}
-              secureTextEntry
-            />
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => {
-                  setPinModalVisible(false);
-                  setNewPin('');
-                  setConfirmPin('');
-                }}
-              >
-                <Text style={styles.cancelButtonText}>إلغاء</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.saveButton]}
-                onPress={handleChangePin}
-              >
-                <Text style={styles.saveButtonText}>حفظ</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </ScrollView>
   );
 }
@@ -341,58 +220,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   logoutText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-  },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 24,
-    textAlign: 'center',
-  },
-  input: {
-    backgroundColor: '#f5f5f5',
-    borderRadius: 8,
-    padding: 16,
-    fontSize: 16,
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 8,
-  },
-  modalButton: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  cancelButton: {
-    backgroundColor: '#f5f5f5',
-  },
-  cancelButtonText: {
-    color: '#000',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  saveButton: {
-    backgroundColor: '#007AFF',
-  },
-  saveButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',

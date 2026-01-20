@@ -5,9 +5,10 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
@@ -16,61 +17,49 @@ export default function SignUp() {
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const { signUp, signIn } = useAuth();
+  const [error, setError] = useState('');
+  const { signUp } = useAuth();
   const router = useRouter();
 
-  const validateUsername = (username: string): boolean => {
-    const usernameRegex = /^[a-zA-Z0-9_]{3,20}$/;
-    return usernameRegex.test(username);
-  };
-
   const handleSignUp = async () => {
-    if (!fullName || !username || !password || !confirmPassword) {
-      Alert.alert('خطأ', 'الرجاء ملء جميع الحقول');
+    if (!fullName || !username || !password) {
+      setError('يرجى ملء جميع الحقول');
       return;
     }
 
-    if (!validateUsername(username)) {
-      Alert.alert(
-        'خطأ',
-        'اسم المستخدم يجب أن يحتوي على حروف وأرقام وشرطة سفلية فقط (3-20 حرف)'
-      );
+    if (username.length < 3 || username.length > 20) {
+      setError('اسم المستخدم يجب أن يكون بين 3 و 20 حرف');
+      return;
+    }
+
+    if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+      setError('اسم المستخدم يجب أن يحتوي على أحرف وأرقام فقط');
       return;
     }
 
     if (password.length < 6) {
-      Alert.alert('خطأ', 'كلمة المرور يجب أن تكون 6 أحرف على الأقل');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      Alert.alert('خطأ', 'كلمات المرور غير متطابقة');
+      setError('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
       return;
     }
 
     setLoading(true);
-    const { error } = await signUp(username, fullName, password);
+    setError('');
 
-    if (error) {
-      setLoading(false);
-      Alert.alert('خطأ', error.message || 'حدث خطأ أثناء التسجيل');
-    } else {
-      const { error: signInError } = await signIn(username, password);
-      setLoading(false);
+    const { error: signUpError } = await signUp(username, fullName, password);
 
-      if (signInError) {
-        Alert.alert('نجح', 'تم إنشاء الحساب بنجاح! الرجاء تسجيل الدخول.', [
-          {
-            text: 'حسناً',
-            onPress: () => router.replace('/(auth)/sign-in'),
-          },
-        ]);
+    setLoading(false);
+
+    if (signUpError) {
+      if (signUpError.message?.includes('already registered')) {
+        setError('اسم المستخدم مستخدم بالفعل');
       } else {
-        router.replace('/(tabs)');
+        setError('حدث خطأ أثناء إنشاء الحساب');
       }
+      return;
     }
+
+    router.replace('/(tabs)');
   };
 
   return (
@@ -78,67 +67,72 @@ export default function SignUp() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
-      <View style={styles.content}>
-        <Text style={styles.title}>الطرف</Text>
-        <Text style={styles.subtitle}>إنشاء حساب جديد</Text>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.content}>
+          <Text style={styles.title}>الطرف</Text>
+          <Text style={styles.subtitle}>إنشاء حساب جديد</Text>
 
-        <TextInput
-          style={styles.input}
-          placeholder="الاسم الكامل"
-          placeholderTextColor="#999"
-          value={fullName}
-          onChangeText={setFullName}
-          autoCapitalize="words"
-          editable={!loading}
-        />
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>الاسم الكامل</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="أدخل اسمك الكامل"
+              placeholderTextColor="#999"
+              value={fullName}
+              onChangeText={setFullName}
+              autoCapitalize="words"
+              editable={!loading}
+            />
+          </View>
 
-        <TextInput
-          style={styles.input}
-          placeholder="اسم المستخدم"
-          placeholderTextColor="#999"
-          value={username}
-          onChangeText={setUsername}
-          autoCapitalize="none"
-          editable={!loading}
-        />
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>اسم المستخدم</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="username_123"
+              placeholderTextColor="#999"
+              value={username}
+              onChangeText={setUsername}
+              autoCapitalize="none"
+              editable={!loading}
+            />
+          </View>
 
-        <TextInput
-          style={styles.input}
-          placeholder="كلمة المرور"
-          placeholderTextColor="#999"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          editable={!loading}
-        />
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>كلمة المرور</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="أدخل كلمة المرور"
+              placeholderTextColor="#999"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              editable={!loading}
+            />
+          </View>
 
-        <TextInput
-          style={styles.input}
-          placeholder="تأكيد كلمة المرور"
-          placeholderTextColor="#999"
-          value={confirmPassword}
-          onChangeText={setConfirmPassword}
-          secureTextEntry
-          editable={!loading}
-        />
+          {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleSignUp}
-          disabled={loading}
-        >
-          <Text style={styles.buttonText}>
-            {loading ? 'جاري التسجيل...' : 'تسجيل'}
-          </Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.button, loading && styles.buttonDisabled]}
+            onPress={handleSignUp}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>إنشاء حساب</Text>
+            )}
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          onPress={() => router.back()}
-          disabled={loading}
-        >
-          <Text style={styles.link}>لديك حساب بالفعل؟ سجل الدخول</Text>
-        </TouchableOpacity>
-      </View>
+          <TouchableOpacity
+            onPress={() => router.replace('/(auth)/sign-in')}
+            disabled={loading}
+          >
+            <Text style={styles.link}>لديك حساب بالفعل؟ تسجيل الدخول</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -147,6 +141,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   content: {
     flex: 1,
@@ -161,10 +158,20 @@ const styles = StyleSheet.create({
     color: '#007AFF',
   },
   subtitle: {
-    fontSize: 20,
+    fontSize: 18,
     textAlign: 'center',
     marginBottom: 40,
     color: '#666',
+  },
+  inputContainer: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+    textAlign: 'right',
   },
   input: {
     backgroundColor: '#fff',
@@ -172,10 +179,18 @@ const styles = StyleSheet.create({
     borderColor: '#ddd',
     borderRadius: 8,
     padding: 16,
-    marginBottom: 16,
     fontSize: 16,
     textAlign: 'right',
     color: '#000',
+  },
+  error: {
+    backgroundColor: '#ffebee',
+    color: '#c62828',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    textAlign: 'right',
+    fontSize: 14,
   },
   button: {
     backgroundColor: '#007AFF',
