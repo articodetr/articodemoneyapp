@@ -13,6 +13,7 @@ import {
 import { X, ArrowUp, ArrowDown, Plus, Save, Printer } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useDataRefresh } from '@/contexts/DataRefreshContext';
+import { generateAndShareReceipt } from '@/services/receiptService';
 
 const CURRENCIES = [
   { code: 'USD', symbol: '$', name: 'دولار أمريكي' },
@@ -29,7 +30,7 @@ interface QuickAddMovementSheetProps {
   onClose: () => void;
   customerId: string;
   customerName: string;
-  customerAccountNumber: string;
+  customerAccountNumber?: string;
   currentBalances?: any[];
   onSuccess: () => void;
   customerKind?: 'registered' | 'local';
@@ -42,6 +43,7 @@ export default function QuickAddMovementSheet({
   onClose,
   customerId,
   customerName,
+  customerAccountNumber,
   onSuccess,
   customerKind = 'local',
 }: QuickAddMovementSheetProps) {
@@ -57,6 +59,7 @@ export default function QuickAddMovementSheet({
   const [previousBalance, setPreviousBalance] = useState<number>(0);
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
   const [userCustomerId, setUserCustomerId] = useState<string>('');
+  const [lastMovementNumber, setLastMovementNumber] = useState<string>('');
 
   useEffect(() => {
     if (visible) {
@@ -159,7 +162,7 @@ export default function QuickAddMovementSheet({
     return true;
   };
 
-  const handleSave = async () => {
+  const handleSave = async (shouldPrint: boolean = false) => {
     if (!validateForm()) return;
     if (!userCustomerId && customerKind === 'local') {
       Alert.alert('خطأ', 'لم يتم العثور على معرف العميل');
@@ -173,6 +176,8 @@ export default function QuickAddMovementSheet({
 
       const amountValue = parseFloat(amount);
       const signedAmount = movementType === 'incoming' ? amountValue : -amountValue;
+
+      let movementNumber = '';
 
       if (customerKind === 'registered') {
         const { data, error } = await supabase.rpc('create_two_party_movement', {
@@ -195,11 +200,14 @@ export default function QuickAddMovementSheet({
           note: note.trim() || null,
         };
 
-        const { error: mainError } = await supabase
+        const { data: insertedData, error: mainError } = await supabase
           .from('customer_movements')
-          .insert(mainMovement as any);
+          .insert(mainMovement as any)
+          .select('movement_number')
+          .single();
 
         if (mainError) throw mainError;
+        movementNumber = insertedData?.movement_number.toString() || '';
       }
 
       if (movementType === 'incoming' && commissionEnabled) {
@@ -230,7 +238,34 @@ export default function QuickAddMovementSheet({
 
       triggerRefresh();
       onSuccess();
-      Alert.alert('نجح', 'تم إضافة الحركة بنجاح');
+
+      if (shouldPrint && movementNumber) {
+        setLastMovementNumber(movementNumber);
+        const success = await generateAndShareReceipt({
+          receiptNumber: movementNumber,
+          customerName,
+          accountNumber: customerAccountNumber || '',
+          amount: amountValue,
+          currency,
+          currencySymbol: getCurrencySymbol(currency),
+          date: new Date(),
+          movementType,
+          notes: note.trim() || undefined,
+          commission:
+            movementType === 'incoming' && commissionEnabled
+              ? parseFloat(commissionAmount)
+              : undefined,
+        });
+
+        if (success) {
+          Alert.alert('نجح', 'تم إضافة الحركة وإنشاء السند بنجاح');
+        } else {
+          Alert.alert('نجح', 'تم إضافة الحركة بنجاح، لكن فشل إنشاء السند');
+        }
+      } else {
+        Alert.alert('نجح', 'تم إضافة الحركة بنجاح');
+      }
+
       handleClose();
     } catch (error) {
       console.error('Error saving movement:', error);
@@ -473,11 +508,18 @@ export default function QuickAddMovementSheet({
               )}
             </TouchableOpacity>
             <TouchableOpacity
-              style={styles.printButton}
-              onPress={() => Alert.alert('طباعة', 'ميزة الطباعة قيد التطوير')}
+              style={[styles.printButton, isSaving && styles.printButtonDisabled]}
+              onPress={() => handleSave(true)}
+              disabled={isSaving}
             >
-              <Printer size={18} color="#3B82F6" />
-              <Text style={styles.printButtonText}>حفظ + طباعة</Text>
+              {isSaving ? (
+                <ActivityIndicator color="#3B82F6" />
+              ) : (
+                <>
+                  <Printer size={18} color="#3B82F6" />
+                  <Text style={styles.printButtonText}>حفظ + طباعة</Text>
+                </>
+              )}
             </TouchableOpacity>
           </View>
         </View>
@@ -757,5 +799,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#3B82F6',
+  },
+  printButtonDisabled: {
+    opacity: 0.5,
   },
 });

@@ -34,6 +34,7 @@ import { supabase } from '@/lib/supabase';
 import { Customer, AccountMovement, CURRENCIES } from '@/types/database';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
+import { generateAndShareReceipt } from '@/services/receiptService';
 
 
 
@@ -323,8 +324,38 @@ export default function CustomerDetailsScreen() {
     }
   };
 
-  const handlePrint = () => {
-    Alert.alert('طباعة PDF', 'ميزة الطباعة قيد التطوير');
+  const handlePrint = async () => {
+    if (!customer) return;
+
+    try {
+      const balances = calculateBalanceByCurrency(movements);
+      let totalBalance = 0;
+      let mainCurrency = 'USD';
+
+      if (balances.length > 0) {
+        totalBalance = balances[0].balance;
+        mainCurrency = balances[0].currency;
+      }
+
+      const success = await generateAndShareReceipt({
+        receiptNumber: `STMT-${customer.account_number}`,
+        customerName: customer.name,
+        accountNumber: customer.account_number,
+        amount: Math.abs(totalBalance),
+        currency: mainCurrency,
+        currencySymbol: getCurrencySymbol(mainCurrency),
+        date: new Date(),
+        movementType: totalBalance >= 0 ? 'incoming' : 'outgoing',
+        notes: `كشف حساب - عدد الحركات: ${movements.length}`,
+      });
+
+      if (!success) {
+        Alert.alert('خطأ', 'فشل إنشاء كشف الحساب');
+      }
+    } catch (error) {
+      console.error('Error generating statement:', error);
+      Alert.alert('خطأ', 'حدث خطأ أثناء إنشاء كشف الحساب');
+    }
   };
 
   const handleResetAccount = () => {
@@ -634,8 +665,29 @@ export default function CustomerDetailsScreen() {
     }
   };
 
-  const handlePrintMovementReceipt = (movement: AccountMovement) => {
-    Alert.alert('طباعة السند', 'ميزة طباعة السند قيد التطوير');
+  const handlePrintMovementReceipt = async (movement: AccountMovement) => {
+    try {
+      if (!customer) return;
+
+      const success = await generateAndShareReceipt({
+        receiptNumber: movement.movement_number,
+        customerName: customer.name,
+        accountNumber: customer.account_number,
+        amount: parseFloat(movement.amount),
+        currency: movement.currency,
+        currencySymbol: getCurrencySymbol(movement.currency),
+        date: new Date(movement.created_at),
+        movementType: movement.movement_type,
+        notes: movement.notes || undefined,
+      });
+
+      if (!success) {
+        Alert.alert('خطأ', 'فشل إنشاء السند');
+      }
+    } catch (error) {
+      console.error('Error printing receipt:', error);
+      Alert.alert('خطأ', 'حدث خطأ أثناء طباعة السند');
+    }
   };
 
   const balance = customer?.balance || 0;
