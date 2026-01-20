@@ -1,57 +1,58 @@
-interface PDFHeaderOptions {
-  title?: string;
-  logoUrl?: string;
+import { COMPANY_INFO } from '@/constants/companyInfo';
+
+export interface PDFHeaderOptions {
+  title: string;
+  logoDataUrl?: string;
   primaryColor?: string;
   darkColor?: string;
   height?: number;
-  showPhone?: boolean;
-  shopName?: string;
-  shopPhone?: string;
+  showPhones?: boolean;
 }
 
-export function generatePDFHeaderHTML(options: PDFHeaderOptions = {}): string {
+export function generatePDFHeaderHTML(options: PDFHeaderOptions): string {
   const {
-    title = 'سند قبض',
-    logoUrl,
-    primaryColor = '#059669',
-    darkColor = '#047857',
-    height = 180,
-    showPhone = true,
-    shopName = 'التطبيق المحاسبي',
-    shopPhone = '',
+    title,
+    logoDataUrl,
+    primaryColor = '#382de3',
+    darkColor = '#2821b8',
+    height = 150,
+    showPhones = true,
   } = options;
 
-  const logoSection = logoUrl
-    ? `<img src="${logoUrl}" alt="Logo" style="width: 80px; height: 80px; object-fit: contain;">`
-    : `<div style="font-size: 48px; font-weight: bold; color: white; font-family: 'Arial', sans-serif;">${shopName}</div>`;
+  const logoHTML = logoDataUrl && logoDataUrl !== '' && !logoDataUrl.includes('undefined')
+    ? `<img src="${logoDataUrl}" alt="Logo" class="company-logo" onerror="this.style.display='none'" />`
+    : `<div class="company-name-ar">الترف</div>
+       <div class="company-name-ar">للحوالات المالية</div>`;
 
   return `
-    <div class="pdf-header">
-      <div class="header-background"></div>
-      <div class="header-content">
-        <div class="header-left">
-          ${
-            showPhone && shopPhone
-              ? `
-            <div class="contact-box">
-              <div class="contact-label">تواصل معنا</div>
-              <div class="contact-value">${shopPhone}</div>
-            </div>
-          `
-              : ''
-          }
-        </div>
-
-        <div class="header-center">
-          ${logoSection}
-          <div class="header-title">${title}</div>
-        </div>
-
-        <div class="header-right">
-          <div class="company-name-ar">${shopName}</div>
+    <div class="pdf-header" style="background: linear-gradient(135deg, ${primaryColor} 0%, ${darkColor} 100%);">
+      ${showPhones ? `
+      <div class="header-right">
+        <div class="contact-box">
+          <div class="contact-box-title">Yemen - Sana'a</div>
+          <div class="contact-box-phone">${COMPANY_INFO.phone1}</div>
+          <div class="contact-box-phone">${COMPANY_INFO.phone2}</div>
         </div>
       </div>
+      ` : '<div class="header-spacer"></div>'}
+
+      <div class="header-center">
+        ${logoHTML}
+        <div class="company-name-en" style="background: #ffffff; color: ${primaryColor};">Al-Taraf Exchange</div>
+      </div>
+
+      ${showPhones ? `
+      <div class="header-left">
+        <div class="contact-box">
+          <div class="contact-box-title">اليمن - صنعاء</div>
+          <div class="contact-box-phone">${COMPANY_INFO.phone1}</div>
+          <div class="contact-box-phone">${COMPANY_INFO.phone2}</div>
+        </div>
+      </div>
+      ` : '<div class="header-spacer"></div>'}
     </div>
+
+    <div class="document-title">${title}</div>
   `;
 }
 
@@ -60,96 +61,138 @@ export function generatePDFHeaderStyles(): string {
     .pdf-header {
       position: relative;
       width: 100%;
-      min-height: 180px;
-      margin-bottom: 30px;
-      overflow: hidden;
-    }
-
-    .header-background {
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: linear-gradient(135deg, #059669 0%, #10B981 50%, #34D399 100%);
-      z-index: 0;
-    }
-
-    .header-content {
-      position: relative;
+      min-height: 140px;
       display: flex;
-      justify-content: space-between;
       align-items: center;
-      padding: 30px 40px;
-      z-index: 1;
+      justify-content: space-between;
+      padding: 18px 30px;
+      margin-bottom: 20px;
+      overflow: visible;
+      flex-shrink: 0;
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
 
-    .header-left, .header-right {
-      flex: 1;
+    .header-left,
+    .header-right {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      width: 180px;
+      flex-shrink: 0;
+    }
+
+    .header-left { justify-content: flex-start; }
+    .header-right { justify-content: flex-end; }
+
+    .header-center {
+      position: relative;
+      z-index: 2;
       display: flex;
       flex-direction: column;
       align-items: center;
-      color: white;
+      justify-content: center;
+      gap: 10px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .header-spacer {
+      width: 180px;
+      flex-shrink: 0;
     }
 
     .contact-box {
-      background: rgba(255, 255, 255, 0.15);
-      backdrop-filter: blur(10px);
-      padding: 12px 20px;
-      border-radius: 12px;
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      text-align: center;
-      min-width: 140px;
-    }
-
-    .contact-label {
-      font-size: 12px;
-      opacity: 0.9;
-      margin-bottom: 4px;
-      font-weight: 500;
-    }
-
-    .contact-value {
-      font-size: 16px;
-      font-weight: bold;
-      letter-spacing: 0.5px;
-    }
-
-    .header-center {
-      flex: 2;
+      background: rgba(255, 255, 255, 0.25);
+      backdrop-filter: blur(8px);
+      border: 2px solid rgba(255, 255, 255, 0.4);
+      border-radius: 16px;
+      padding: 10px 16px;
       display: flex;
       flex-direction: column;
+      gap: 5px;
       align-items: center;
-      gap: 12px;
+      justify-content: center;
+      width: 100%;
+      max-width: 170px;
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
 
-    .header-title {
-      font-size: 28px;
-      font-weight: bold;
-      color: white;
+    .contact-box-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #ffffff;
       text-align: center;
-      text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+      line-height: 1.4;
+      white-space: nowrap;
+    }
+
+    .contact-box-phone {
+      font-size: 12px;
+      font-weight: 600;
+      color: #ffffff;
+      text-align: center;
+      direction: ltr;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+    }
+
+    .company-logo {
+      height: 60px;
+      width: auto;
+      max-width: 180px;
+      object-fit: contain;
+      filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.3));
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
 
     .company-name-ar {
-      font-size: 20px;
-      font-weight: bold;
-      color: white;
+      font-size: 22px;
+      font-weight: 800;
+      color: #ffffff;
+      line-height: 1.3;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
       text-align: center;
-      direction: rtl;
-      text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+      white-space: nowrap;
+    }
+
+    .company-name-en {
+      padding: 6px 20px;
+      border-radius: 14px;
+      font-size: 15px;
+      font-weight: 700;
+      text-align: center;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+      white-space: nowrap;
+      line-height: 1.4;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .document-title {
+      text-align: center;
+      font-size: 22px;
+      font-weight: bold;
+      color: #111827;
+      margin: 18px 0 25px;
+      padding: 8px;
     }
 
     @media print {
-      .pdf-header {
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-        page-break-inside: avoid;
+      * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
       }
 
-      .header-background {
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
+      .pdf-header {
+        page-break-inside: avoid;
+        page-break-after: avoid;
       }
     }
   `;

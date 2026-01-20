@@ -1,325 +1,671 @@
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
+import { AccountMovement, Currency, CURRENCIES } from '@/types/database';
+import { COMPANY_INFO } from '@/constants/companyInfo';
 import { numberToArabicTextWithCurrency } from './numberToArabicText';
-import { generatePDFHeaderHTML, generatePDFHeaderStyles } from './pdfHeaderGenerator';
 
-interface ReceiptData {
-  receiptNumber: string;
+interface ReceiptData extends AccountMovement {
   customerName: string;
-  accountNumber: string;
-  amount: number;
-  currency: string;
-  currencySymbol: string;
-  date: Date;
-  movementType: 'incoming' | 'outgoing';
-  notes?: string;
+  customerPhone?: string;
+  customerAccountNumber?: string;
   commission?: number;
-  shopName?: string;
-  shopPhone?: string;
+  commission_currency?: string;
+  commission_recipient_name?: string;
+  destination?: string;
+  transferNumber?: string;
+  beneficiary?: string;
 }
 
-export function generateQRCodeData(receipt: ReceiptData): string {
-  const data = {
-    receipt: receipt.receiptNumber,
-    customer: receipt.customerName,
-    amount: receipt.amount,
-    currency: receipt.currency,
-    date: format(receipt.date, 'yyyy-MM-dd'),
-    type: receipt.movementType === 'incoming' ? 'قبض' : 'صرف',
+function getCurrencySymbol(code: string): string {
+  const currency = CURRENCIES.find((c) => c.code === code);
+  return currency?.symbol || code;
+}
+
+function getCurrencyName(code: string): string {
+  const currency = CURRENCIES.find((c) => c.code === code);
+  return currency?.name || code;
+}
+
+export function generateQRCodeData(receiptData: ReceiptData): string {
+  const qrData = {
+    receipt_number: receiptData.receipt_number,
+    customer: receiptData.customerName,
+    amount: receiptData.amount,
+    currency: receiptData.currency,
+    date: receiptData.created_at,
+    type: receiptData.movement_type,
   };
-
-  return JSON.stringify(data);
+  return JSON.stringify(qrData);
 }
 
-export function generateReceiptHTML(
-  receipt: ReceiptData,
-  qrCodeUrl: string,
-  logoUrl?: string,
-): string {
-  const amountInWords = numberToArabicTextWithCurrency(
-    receipt.amount,
-    receipt.currency,
-  );
+export function generateReceiptHTML(receiptData: ReceiptData, qrCodeDataUrl: string, logoDataUrl?: string): string {
+  const {
+    receipt_number,
+    customerName,
+    customerAccountNumber,
+    amount,
+    currency,
+    commission = 0,
+    commission_currency = 'YER',
+    movement_type,
+    notes,
+    created_at,
+    sender_name,
+    beneficiary_name,
+    transfer_number,
+  } = receiptData;
 
-  const netAmount = receipt.commission
-    ? receipt.amount - receipt.commission
-    : receipt.amount;
+  const receiptDate = format(new Date(created_at), 'yyyy-MM-dd', { locale: ar });
+  const receiptTime = format(new Date(created_at), 'HH:mm:ss', { locale: ar });
+  const receiptDateTime = format(new Date(created_at), 'dd/MM/yyyy', { locale: ar });
 
-  const receiptTypeText =
-    receipt.movementType === 'incoming' ? 'سند قبض' : 'سند صرف';
-  const receiptTypeColor =
-    receipt.movementType === 'incoming' ? '#10B981' : '#EF4444';
+  const isTransfer = Boolean(receiptData.transfer_direction);
 
-  const header = generatePDFHeaderHTML({
-    title: receiptTypeText,
-    logoUrl,
-    primaryColor: receiptTypeColor,
-    showPhone: true,
-    shopName: receipt.shopName || 'التطبيق المحاسبي',
-    shopPhone: receipt.shopPhone || '',
-  });
+  const currencyName = getCurrencyName(currency);
+  const commissionCurrencyName = getCurrencyName(commission_currency);
+
+  const netAmount = Number(amount) - Number(commission || 0);
+  const amountInWords = numberToArabicTextWithCurrency(netAmount, currency as Currency);
+
+  const actionTitle = isTransfer
+    ? receiptData.transfer_direction === 'customer_to_customer'
+      ? 'تحويل داخلي بين عميلين'
+      : receiptData.transfer_direction === 'shop_to_customer'
+      ? 'تحويل من المحل للعميل'
+      : 'تحويل من العميل للمحل'
+    : movement_type === 'outgoing' ? 'تسليم للعميل' : 'استلام من العميل';
+
+  const primaryColor = '#382de3';
+  const darkColor = '#2821b8';
 
   return `
 <!DOCTYPE html>
-<html dir="rtl" lang="ar">
+<html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${receiptTypeText} - ${receipt.receiptNumber}</title>
-  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+  <title>إيصال تحويل أموال</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=block');
+
     * {
-      margin: 0;
-      padding: 0;
       box-sizing: border-box;
+      font-family: 'Cairo', 'Tahoma', 'Arial', sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
 
     body {
-      font-family: 'Cairo', 'Arial', sans-serif;
-      background: white;
+      width: 100%;
+      min-height: 100vh;
+      background: #f5f5f5;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
       padding: 20px;
       direction: rtl;
+      margin: 0;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
 
-    ${generatePDFHeaderStyles()}
+    .receipt-page {
+      width: 100%;
+      min-height: 100vh;
+      background: #f5f5f5;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      direction: rtl;
+      gap: 20px;
+    }
 
     .receipt-container {
-      max-width: 800px;
-      margin: 0 auto;
-      background: white;
-      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-      border-radius: 12px;
+      width: 900px;
+      height: 634px;
+      background: #ffffff;
+      border: 3px solid ${primaryColor};
+      border-radius: 24px;
+      padding: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .receipt-inner-frame {
+      width: 100%;
+      height: 100%;
+      border: 2px solid ${primaryColor};
+      border-radius: 18px;
+      background: #ffffff;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .receipt-header {
+      position: relative;
+      width: 100%;
+      height: 150px;
+      background: linear-gradient(135deg, ${primaryColor} 0%, ${darkColor} 100%);
+      border-radius: 18px 18px 0 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 40px;
+      flex-shrink: 0;
+      overflow: visible;
+    }
+
+    .header-left,
+    .header-right {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+    }
+
+    .header-left { justify-content: flex-start; }
+    .header-right { justify-content: flex-end; }
+
+    .header-center {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+    }
+
+    .contact-box {
+      background: rgba(255, 255, 255, 0.18);
+      backdrop-filter: blur(12px);
+      border: 2px solid rgba(255, 255, 255, 0.35);
+      border-radius: 20px;
+      padding: 15px 25px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      align-items: center;
+      justify-content: center;
+      min-width: 240px;
+    }
+
+    .contact-box-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #ffffff;
+      text-align: center;
+      line-height: 1.5;
+      white-space: nowrap;
+    }
+
+    .contact-box-phone {
+      font-size: 14px;
+      font-weight: 600;
+      color: #ffffff;
+      text-align: center;
+      direction: ltr;
+      letter-spacing: 0.8px;
+      white-space: nowrap;
+    }
+
+    .company-logo {
+      height: 60px;
+      width: auto;
+      object-fit: contain;
+      filter: drop-shadow(2px 2px 6px rgba(0, 0, 0, 0.4));
+    }
+
+    .company-name-ar-line {
+      font-size: 20px;
+      font-weight: 800;
+      color: #ffffff;
+      line-height: 1.4;
+      text-shadow: 2px 2px 6px rgba(0, 0, 0, 0.4);
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .company-name-en {
+      background: #ffffff;
+      color: ${primaryColor};
+      font-size: 15px;
+      font-weight: 700;
+      padding: 8px 30px;
+      border-radius: 25px;
+      margin-top: 8px;
+      letter-spacing: 0.8px;
+      text-align: center;
+      box-shadow: 0 3px 10px rgba(0, 0, 0, 0.25);
+      white-space: nowrap;
+      line-height: 1;
+    }
+
+    .receipt-content {
+      flex: 1;
+      min-height: 0;
+      padding: 8px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
       overflow: hidden;
     }
 
-    .receipt-body {
-      padding: 30px 40px;
-    }
-
-    .info-section {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 20px;
-      margin-bottom: 30px;
-    }
-
-    .info-box {
-      background: #F9FAFB;
-      padding: 16px;
-      border-radius: 8px;
-      border-left: 4px solid ${receiptTypeColor};
-    }
-
-    .info-label {
-      font-size: 12px;
-      color: #6B7280;
-      margin-bottom: 6px;
-      font-weight: 600;
-    }
-
-    .info-value {
-      font-size: 18px;
-      color: #111827;
-      font-weight: 700;
-    }
-
-    .amount-section {
-      display: grid;
-      grid-template-columns: repeat(${receipt.commission ? '4' : '2'}, 1fr);
-      gap: 16px;
-      margin: 30px 0;
-    }
-
-    .amount-card {
-      background: linear-gradient(135deg, #F3F4F6 0%, #E5E7EB 100%);
-      padding: 20px;
-      border-radius: 12px;
-      text-align: center;
-      border: 2px solid #D1D5DB;
-    }
-
-    .amount-card.primary {
-      background: linear-gradient(135deg, ${receiptTypeColor} 0%, ${receiptTypeColor}dd 100%);
-      color: white;
-      border-color: ${receiptTypeColor};
-    }
-
-    .amount-label {
-      font-size: 13px;
-      opacity: 0.8;
-      margin-bottom: 8px;
-      font-weight: 600;
-    }
-
-    .amount-value {
-      font-size: 24px;
-      font-weight: bold;
-    }
-
-    .amount-in-words {
-      background: #FEF3C7;
-      padding: 20px;
-      border-radius: 12px;
-      margin: 30px 0;
-      border: 2px solid #FCD34D;
-    }
-
-    .amount-in-words-label {
-      font-size: 14px;
-      color: #92400E;
-      margin-bottom: 8px;
-      font-weight: 600;
-    }
-
-    .amount-in-words-value {
-      font-size: 20px;
-      color: #78350F;
-      font-weight: bold;
-    }
-
-    .notes-section {
-      background: #F3F4F6;
-      padding: 20px;
-      border-radius: 12px;
-      margin: 30px 0;
-      min-height: 80px;
-    }
-
-    .notes-label {
-      font-size: 14px;
-      color: #6B7280;
-      margin-bottom: 10px;
-      font-weight: 600;
-    }
-
-    .notes-value {
-      font-size: 16px;
-      color: #111827;
-      line-height: 1.6;
-    }
-
-    .qr-section {
+    .title-row {
       display: flex;
-      justify-content: center;
       align-items: center;
-      margin: 30px 0;
-      padding: 20px;
-      background: #F9FAFB;
-      border-radius: 12px;
+      justify-content: space-between;
+      gap: 10px;
     }
 
-    .qr-code {
-      width: 150px;
-      height: 150px;
-      border: 4px solid ${receiptTypeColor};
-      border-radius: 12px;
-      padding: 8px;
-      background: white;
-    }
-
-    .footer {
-      text-align: center;
-      padding: 20px;
-      background: #F9FAFB;
-      border-top: 2px solid #E5E7EB;
+    .date-pill,
+    .document-pill {
+      background: #ffffff;
+      border: 2px solid ${primaryColor};
+      border-radius: 20px;
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
       font-size: 13px;
-      color: #6B7280;
+      height: 38px;
+      flex-shrink: 0;
+    }
+
+    .pill-label {
+      color: #dc2626;
+      font-weight: 700;
+      line-height: 1;
+      margin: 0;
+      padding: 0;
+    }
+
+    .pill-value {
+      color: #000000;
+      font-weight: 700;
+      line-height: 1;
+      margin: 0;
+      padding: 0;
+    }
+
+    .action-title {
+      background: linear-gradient(135deg, ${primaryColor} 0%, ${darkColor} 100%);
+      color: #ffffff;
+      border-radius: 22px;
+      padding: 0 50px;
+      height: 52px;
+      font-size: 20px;
+      font-weight: 800;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+
+    .customer-row { display: flex; gap: 8px; align-items: center; }
+
+    .account-number-box,
+    .account-label-box,
+    .customer-name-box,
+    .customer-label-box {
+      background: #ffffff;
+      border: 2px solid ${primaryColor};
+      border-radius: 16px;
+      height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .account-number-box { padding: 0 16px; }
+    .account-label-box { padding: 0 14px; }
+
+    .customer-name-box {
+      flex: 1;
+      padding: 0 16px;
+      text-align: center;
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1;
+      color: #000000;
+    }
+
+    .customer-label-box {
+      padding: 0 20px;
+      color: #2563eb;
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .account-value {
+      color: #000000;
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .account-label {
+      color: #2563eb;
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1;
+      text-decoration: none;
+    }
+
+    .notice-box {
+      border: 2px solid ${primaryColor};
+      border-radius: 16px;
+      padding: 6px 14px;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 600;
+      color: #000000;
+      background: #ffffff;
+      line-height: 1.4;
+    }
+
+    .four-cards-row { display: flex; gap: 6px; justify-content: center; }
+
+    .info-card {
+      flex: 1;
+      border: 2px solid ${primaryColor};
+      border-radius: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      background: #ffffff;
+      height: 60px;
+      flex-shrink: 0;
+    }
+
+    .card-label {
+      color: #2563eb;
+      font-size: 10px;
+      font-weight: 700;
+      text-align: center;
+      line-height: 1;
+      margin: 0;
+      padding: 0;
+      text-decoration: none;
+    }
+
+    .card-value {
+      color: #000000;
+      font-size: 16px;
+      font-weight: 700;
+      text-align: center;
+      line-height: 1;
+      margin: 0;
+      padding: 0;
+    }
+
+    .card-currency { font-size: 11px; font-weight: 600; }
+
+    .amount-words-box {
+      border: 2px solid ${primaryColor};
+      border-radius: 16px;
+      padding: 6px 14px;
+      text-align: center;
+      font-size: 14px;
+      font-weight: 700;
+      color: #000000;
+      background: #ffffff;
+      line-height: 1.2;
+    }
+
+    .statement-code-row { display: flex; gap: 6px; }
+
+    .statement-box {
+      flex: 1;
+      border: 2px solid ${primaryColor};
+      border-radius: 16px;
+      font-size: 13px;
+      background: #ffffff;
+      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 45px;
+      flex-shrink: 0;
+    }
+
+    .code-box {
+      width: 100px;
+      border: 2px solid ${primaryColor};
+      border-radius: 16px;
+      font-size: 13px;
+      background: #ffffff;
+      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 45px;
+      flex-shrink: 0;
+    }
+
+    .box-label { color: #2563eb; font-weight: 700; line-height: 1; }
+
+    .bottom-section { display: flex; gap: 8px; min-height: 0; }
+
+    .qr-container { width: 100px; height: 100px; flex-shrink: 0; }
+
+    .transfer-details {
+      flex: 1;
+      border: 2px solid ${primaryColor};
+      border-radius: 16px;
+      padding: 8px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      background: #ffffff;
+      justify-content: center;
+      min-height: 100px;
+      overflow: hidden;
+    }
+
+    .detail-row { display: flex; align-items: center; gap: 8px; font-size: 12px; line-height: 1.5; }
+    .detail-label { color: #000000; font-weight: 700; flex-shrink: 0; min-width: fit-content; }
+    .detail-value { color: #000000; font-weight: 600; flex: 1; }
+
+    .final-notice-row { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+
+    .notice-bar {
+      flex: 1;
+      background: linear-gradient(135deg, ${primaryColor} 0%, ${darkColor} 100%);
+      color: #ffffff;
+      border-radius: 16px;
+      padding: 6px 16px;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+    }
+
+    .timestamp-pill {
+      background: linear-gradient(135deg, ${primaryColor} 0%, ${darkColor} 100%);
+      color: #ffffff;
+      border-radius: 16px;
+      padding: 6px 14px;
+      font-size: 10px;
+      font-weight: 700;
+      white-space: nowrap;
+      direction: ltr;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
     }
 
     @media print {
-      body {
-        padding: 0;
-      }
-
-      .receipt-container {
-        box-shadow: none;
-        border-radius: 0;
-      }
-
-      @page {
-        size: A4;
-        margin: 0;
-      }
+      @page { size: A4 landscape; margin: 0; }
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      body { margin: 0 !important; padding: 0 !important; }
+      .receipt-page { padding: 0; margin: 0; background: #ffffff; }
+      .receipt-container { box-shadow: none; margin: 0 auto !important; }
     }
   </style>
 </head>
+
 <body>
-  <div class="receipt-container">
-    ${header}
-
-    <div class="receipt-body">
-      <div class="info-section">
-        <div class="info-box">
-          <div class="info-label">رقم السند</div>
-          <div class="info-value">${receipt.receiptNumber}</div>
-        </div>
-        <div class="info-box">
-          <div class="info-label">التاريخ</div>
-          <div class="info-value">${format(receipt.date, 'dd/MM/yyyy', { locale: ar })}</div>
-        </div>
-        <div class="info-box">
-          <div class="info-label">اسم العميل</div>
-          <div class="info-value">${receipt.customerName}</div>
-        </div>
-        <div class="info-box">
-          <div class="info-label">رقم الحساب</div>
-          <div class="info-value">${receipt.accountNumber}</div>
-        </div>
-      </div>
-
-      <div class="amount-section">
-        <div class="amount-card primary">
-          <div class="amount-label">المبلغ</div>
-          <div class="amount-value">${Math.round(receipt.amount)} ${receipt.currencySymbol}</div>
-        </div>
-        <div class="amount-card">
-          <div class="amount-label">العملة</div>
-          <div class="amount-value">${receipt.currency}</div>
-        </div>
-        ${
-          receipt.commission
-            ? `
-          <div class="amount-card">
-            <div class="amount-label">العمولة</div>
-            <div class="amount-value">${Math.round(receipt.commission)} ${receipt.currencySymbol}</div>
+  <div class="receipt-page">
+    <div class="receipt-container">
+      <div class="receipt-inner-frame">
+        <div class="receipt-header">
+          <div class="header-right">
+            <div class="contact-box">
+              <div class="contact-box-title">Yemen - Sana'a</div>
+              <div class="contact-box-phone">${COMPANY_INFO.phone1}</div>
+              <div class="contact-box-phone">${COMPANY_INFO.phone2}</div>
+            </div>
           </div>
-          <div class="amount-card primary">
-            <div class="amount-label">الصافي</div>
-            <div class="amount-value">${Math.round(netAmount)} ${receipt.currencySymbol}</div>
+
+          <div class="header-center">
+            ${logoDataUrl
+              ? `<img src="${logoDataUrl}" alt="Logo" class="company-logo" />`
+              : `<div class="company-name-ar-line">الترف</div>
+                 <div class="company-name-ar-line">للحوالات المالية</div>`
+            }
+            <div class="company-name-en">Al-Taraf</div>
           </div>
-        `
-            : ''
-        }
-      </div>
 
-      <div class="amount-in-words">
-        <div class="amount-in-words-label">المبلغ بالحروف:</div>
-        <div class="amount-in-words-value">${amountInWords}</div>
-      </div>
-
-      ${
-        receipt.notes
-          ? `
-        <div class="notes-section">
-          <div class="notes-label">ملاحظات:</div>
-          <div class="notes-value">${receipt.notes}</div>
+          <div class="header-left">
+            <div class="contact-box">
+              <div class="contact-box-title">اليمن - صنعاء</div>
+              <div class="contact-box-phone">${COMPANY_INFO.phone1}</div>
+              <div class="contact-box-phone">${COMPANY_INFO.phone2}</div>
+            </div>
+          </div>
         </div>
-      `
-          : ''
-      }
 
-      <div class="qr-section">
-        <img src="${qrCodeUrl}" alt="QR Code" class="qr-code" />
+        <div class="receipt-content">
+          <div class="title-row">
+            <div class="date-pill">
+              <span class="pill-label">التاريخ:</span>
+              <span class="pill-value">${receiptDate}</span>
+            </div>
+
+            <div class="action-title">${actionTitle}</div>
+
+            <div class="document-pill">
+              <span class="pill-label">رقم المستند:</span>
+              <span class="pill-value">${receipt_number || '000000'}</span>
+            </div>
+          </div>
+
+          <div class="customer-row">
+            <div class="customer-label-box">عميلنا</div>
+            <div class="customer-name-box">${customerName}</div>
+            <div class="account-label-box">
+              <span class="account-label">رقم الحساب:</span>
+            </div>
+            <div class="account-number-box">
+              <span class="account-value">${customerAccountNumber || '000000'}</span>
+            </div>
+          </div>
+
+          <div class="notice-row">
+            <div class="notice-box">
+              نود إشعاركم ${isTransfer
+                ? receiptData.transfer_direction === 'customer_to_customer'
+                  ? `بتحويل المبلغ المذكور من ${sender_name || 'العميل الأول'} إلى ${beneficiary_name || 'العميل الثاني'}`
+                  : receiptData.transfer_direction === 'shop_to_customer'
+                  ? 'بتحويل المبلغ المذكور من المحل إليكم'
+                  : 'باستلام المبلغ المذكور منكم وتحويله للمحل'
+                : `أننا ${movement_type === 'outgoing' ? 'سلمنا لكم حسب توجيهكم لنا بتسليم المبلغ المذكور' : 'استلمنا منكم حسب توجيهكم لنا باستلام المبلغ المذكور'}`} حسب التفاصيل التالية
+            </div>
+          </div>
+
+          <div class="four-cards-row">
+            <div class="info-card">
+              <div class="card-label">المبلغ الإجمالي</div>
+              <div class="card-value">${amount} <span class="card-currency">${getCurrencySymbol(currency)}</span></div>
+            </div>
+
+            <div class="info-card">
+              <div class="card-label">عملة الحساب</div>
+              <div class="card-value">${currencyName}</div>
+            </div>
+
+            <div class="info-card">
+              <div class="card-label">العمولة</div>
+              <div class="card-value">
+                ${commission || 0} <span class="card-currency">${commission > 0 ? commissionCurrencyName : ''}</span>
+              </div>
+            </div>
+
+            <div class="info-card">
+              <div class="card-label">الصافي</div>
+              <div class="card-value">${netAmount} <span class="card-currency">${getCurrencySymbol(currency)}</span></div>
+            </div>
+          </div>
+
+          <div class="amount-words-box">${amountInWords}</div>
+
+          <div class="statement-code-row">
+            <div class="statement-box"><span class="box-label">البيان</span></div>
+            <div class="code-box"><span class="box-label">${transfer_number || 'الكود'}</span></div>
+          </div>
+
+          <div class="bottom-section">
+            <div class="transfer-details">
+              <div class="detail-row">
+                <span class="detail-label">رقم الحوالة:</span>
+                <span class="detail-value">${transfer_number || 'غير محدد'}</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">المرسل:</span>
+                <span class="detail-value">${sender_name || customerName}</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">المستلم:</span>
+                <span class="detail-value">${beneficiary_name || 'غير محدد'}</span>
+              </div>
+              ${commission && commission > 0 ? `
+              <div class="detail-row">
+                <span class="detail-label">مستلم العمولة:</span>
+                <span class="detail-value">${receiptData.commission_recipient_name || 'الأرباح والخسائر'}</span>
+              </div>
+              ` : ''}
+              <div class="detail-row">
+                <span class="detail-label">ملاحظات:</span>
+                <span class="detail-value">${notes || 'لا توجد ملاحظات'}</span>
+              </div>
+            </div>
+
+            <div class="qr-container">
+              ${
+                qrCodeDataUrl
+                  ? `<img src="${qrCodeDataUrl}" alt="QR Code" style="width: 100%; height: 100%; border-radius: 14px;" />`
+                  : '<div class="qr-placeholder">QR</div>'
+              }
+            </div>
+          </div>
+
+          <div class="final-notice-row">
+            <div class="timestamp-pill">${receiptDateTime} م ${receiptTime}</div>
+            <div class="notice-bar">هذا الإشعار لا يلزم ختم أو توقيع</div>
+          </div>
+        </div>
+
       </div>
-    </div>
-
-    <div class="footer">
-      تم إنشاء هذا السند بتاريخ ${format(new Date(), 'dd/MM/yyyy HH:mm', { locale: ar })}
     </div>
   </div>
 </body>
 </html>
-  `;
+`;
 }
