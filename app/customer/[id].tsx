@@ -56,7 +56,7 @@ function groupMovementsByMonth(movements: AccountMovement[]): GroupedMovements {
   const grouped: GroupedMovements = {};
 
   movements.forEach((movement) => {
-    const date = new Date(movement.created_at);
+    const date = movement.created_at ? new Date(movement.created_at) : new Date();
     const key = format(date, 'MMMM yyyy', { locale: ar });
 
     if (!grouped[key]) {
@@ -555,7 +555,8 @@ export default function CustomerDetailsScreen() {
         accountText += `${monthYear}\n`;
         accountText += `-------------------------------------\n`;
         monthMovements.forEach((movement) => {
-          const date = format(new Date(movement.created_at), 'dd/MM/yyyy', {
+          const movementDate = movement.created_at ? new Date(movement.created_at) : new Date();
+          const date = format(movementDate, 'dd/MM/yyyy', {
             locale: ar,
           });
           const type =
@@ -669,6 +670,8 @@ export default function CustomerDetailsScreen() {
     try {
       if (!customer) return;
 
+      const movementDate = movement.created_at ? new Date(movement.created_at) : new Date();
+
       const success = await generateAndShareReceipt({
         receiptNumber: movement.movement_number,
         customerName: customer.name,
@@ -676,7 +679,7 @@ export default function CustomerDetailsScreen() {
         amount: parseFloat(movement.amount),
         currency: movement.currency,
         currencySymbol: getCurrencySymbol(movement.currency),
-        date: new Date(movement.created_at),
+        date: movementDate,
         movementType: movement.movement_type,
         notes: movement.notes || undefined,
       });
@@ -700,7 +703,8 @@ export default function CustomerDetailsScreen() {
       const movementNumber = movement.movement_number.toLowerCase();
       const notes = (movement.notes || '').toLowerCase();
       const amount = movement.amount.toString();
-      const date = format(new Date(movement.created_at), 'dd/MM/yyyy');
+      const movementDate = movement.created_at ? new Date(movement.created_at) : new Date();
+      const date = format(movementDate, 'dd/MM/yyyy');
       const movementTypeText =
         movement.movement_type === 'outgoing' ? 'عليه' : 'له';
 

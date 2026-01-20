@@ -55,9 +55,10 @@ export function generateReceiptHTML(receiptData: ReceiptData, qrCodeDataUrl: str
     transfer_number,
   } = receiptData;
 
-  const receiptDate = format(new Date(created_at), 'yyyy-MM-dd', { locale: ar });
-  const receiptTime = format(new Date(created_at), 'HH:mm:ss', { locale: ar });
-  const receiptDateTime = format(new Date(created_at), 'dd/MM/yyyy', { locale: ar });
+  const dateObj = created_at ? new Date(created_at) : new Date();
+  const receiptDate = format(dateObj, 'yyyy-MM-dd', { locale: ar });
+  const receiptTime = format(dateObj, 'HH:mm:ss', { locale: ar });
+  const receiptDateTime = format(dateObj, 'dd/MM/yyyy', { locale: ar });
 
   const isTransfer = Boolean(receiptData.transfer_direction);
 

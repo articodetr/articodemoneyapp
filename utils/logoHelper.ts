@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { Asset } from 'expo-asset';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 
 const FALLBACK_LOGO_SVG = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Ccircle cx='60' cy='60' r='50' fill='%23059669'/%3E%3Crect x='35' y='45' width='50' height='35' fill='white' rx='3'/%3E%3Crect x='40' y='35' width='40' height='45' fill='white' rx='3'/%3E%3Crect x='50' y='50' width='8' height='12' fill='%23059669'/%3E%3Crect x='62' y='50' width='8' height='12' fill='%23059669'/%3E%3Crect x='53' y='65' width='14' height='15' fill='%23059669' rx='1'/%3E%3C/svg%3E`;
@@ -14,7 +14,7 @@ async function getDefaultLogoBase64(): Promise<string> {
     }
 
     const base64 = await FileSystem.readAsStringAsync(asset.localUri || asset.uri, {
-      encoding: 'base64' as any,
+      encoding: FileSystem.EncodingType.Base64,
     });
 
     return `data:image/png;base64,${base64}`;
