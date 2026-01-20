@@ -13,15 +13,11 @@ import {
   Platform,
   Pressable,
   Keyboard,
-  I18nManager,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Plus, Search, TrendingUp } from 'lucide-react-native';
-
-I18nManager.allowRTL(true);
-I18nManager.forceRTL(true);
 
 interface Balance {
   currency: string;

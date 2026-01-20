@@ -8,16 +8,12 @@ import {
   ActivityIndicator,
   TextInput,
   Modal,
-  I18nManager,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { ArrowRight, Settings, ChevronDown, Plus, Phone, MessageCircle, FileText, Share2, Search } from 'lucide-react-native';
-
-I18nManager.allowRTL(true);
-I18nManager.forceRTL(true);
 
 interface CustomerData {
   id: string;

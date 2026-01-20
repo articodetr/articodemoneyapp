@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -19,7 +19,8 @@ export default function Index() {
 
   return (
     <View style={styles.container}>
-      <ActivityIndicator size="large" color="#007AFF" />
+      <ActivityIndicator size="large" color="#10B981" />
+      <Text style={styles.loadingText}>جاري التحميل...</Text>
     </View>
   );
 }
@@ -30,5 +31,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#fff',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#666',
+    fontWeight: '500',
   },
 });
