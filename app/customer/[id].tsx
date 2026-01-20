@@ -163,7 +163,7 @@ export default function CustomerDetailsScreen() {
       if (customerKind === 'registered') {
         const { data: profile, error } = await supabase
           .from('profiles')
-          .select('id, full_name, account_number, phone')
+          .select('id, full_name, account_number')
           .eq('id', id)
           .maybeSingle() as any;
 
@@ -176,7 +176,7 @@ export default function CustomerDetailsScreen() {
         customerData = {
           id: profile.id,
           name: profile.full_name || 'بدون اسم',
-          phone: profile.phone || '',
+          phone: '',
           account_number: profile.account_number,
           notes: '',
           created_at: new Date().toISOString(),
