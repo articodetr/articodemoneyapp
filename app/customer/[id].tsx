@@ -32,12 +32,12 @@ import {
 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { Customer, AccountMovement, CURRENCIES } from '@/types/database';
-import { format, isSameMonth, isSameYear } from 'date-fns';
+import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
-import { generateAccountStatementHTML } from '@/utils/accountStatementGenerator';
-import { getLogoBase64 } from '@/utils/logoHelper';
+
+
+
+
 import QuickAddMovementSheet from '@/components/QuickAddMovementSheet';
 
 interface GroupedMovements {
@@ -189,7 +189,6 @@ export default function CustomerDetailsScreen() {
   const [totalIncoming, setTotalIncoming] = useState(0);
   const [totalOutgoing, setTotalOutgoing] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
-  const [isPrinting, setIsPrinting] = useState(false);
   const [showCurrencyDetails, setShowCurrencyDetails] = useState(false);
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
@@ -294,65 +293,8 @@ export default function CustomerDetailsScreen() {
     }
   };
 
-  const handlePrint = async () => {
-    if (!customer || movements.length === 0) {
-      Alert.alert('تنبيه', 'لا توجد حركات لطباعتها');
-      return;
-    }
-
-    setIsPrinting(true);
-
-    try {
-      let logoDataUrl: string | undefined;
-      try {
-        console.log('[CustomerDetails] Loading logo for PDF...');
-        logoDataUrl = await getLogoBase64();
-
-        if (logoDataUrl && logoDataUrl.length > 0) {
-          console.log('[CustomerDetails] Logo loaded successfully. Length:', logoDataUrl.length);
-        } else {
-          console.warn('[CustomerDetails] Logo is empty, will use fallback');
-          logoDataUrl = undefined;
-        }
-      } catch (logoError) {
-        console.warn(
-          '[CustomerDetails] Could not load logo, continuing without it:',
-          logoError,
-        );
-        logoDataUrl = undefined;
-      }
-
-      console.log('[CustomerDetails] Generating HTML for PDF...');
-      const html = generateAccountStatementHTML(
-        customer.name,
-        movements,
-        logoDataUrl,
-      );
-
-      console.log('[CustomerDetails] Creating PDF file...');
-      const { uri } = await Print.printToFileAsync({ html });
-      console.log('[CustomerDetails] PDF created at:', uri);
-
-      const canShare = await Sharing.isAvailableAsync();
-      if (canShare) {
-        await Sharing.shareAsync(uri, {
-          mimeType: 'application/pdf',
-          dialogTitle: `كشف حساب ${customer.name}`,
-          UTI: 'com.adobe.pdf',
-        });
-      } else {
-        Alert.alert('نجح', 'تم إنشاء كشف الحساب بنجاح');
-      }
-    } catch (error) {
-      console.error('[CustomerDetails] Error generating PDF:', error);
-      Alert.alert('خطأ', 'حدث خطأ أثناء إنشاء كشف الحساب');
-    } finally {
-      setIsPrinting(false);
-    }
-  };
-
-  const handleSettleUp = () => {
-    Alert.alert('تسوية الحساب', 'ميزة تسوية الحساب قيد التطوير');
+  const handlePrint = () => {
+    Alert.alert('طباعة PDF', 'ميزة الطباعة قيد التطوير');
   };
 
   const handleResetAccount = () => {
@@ -599,14 +541,7 @@ export default function CustomerDetailsScreen() {
   };
 
   const handleEditMovement = (movement: AccountMovement) => {
-    router.push({
-      pathname: '/edit-movement',
-      params: {
-        movementId: movement.id,
-        customerName: customer?.name,
-        customerAccountNumber: customer?.account_number,
-      },
-    });
+    Alert.alert('تعديل الحركة', 'ميزة التعديل قيد التطوير');
   };
 
   const handleDeleteMovement = (movement: AccountMovement) => {
@@ -647,14 +582,7 @@ export default function CustomerDetailsScreen() {
   };
 
   const handlePrintMovementReceipt = (movement: AccountMovement) => {
-    router.push({
-      pathname: '/receipt-preview',
-      params: {
-        movementId: movement.id,
-        customerName: customer?.name,
-        customerAccountNumber: customer?.account_number,
-      },
-    });
+    Alert.alert('طباعة السند', 'ميزة طباعة السند قيد التطوير');
   };
 
   const balance = customer?.balance || 0;
@@ -842,16 +770,8 @@ export default function CustomerDetailsScreen() {
           >
             <Text style={styles.tabButtonPrimaryText}>مشاركة الحساب</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tabButton, isPrinting && styles.tabButtonDisabled]}
-            onPress={handlePrint}
-            disabled={isPrinting || movements.length === 0}
-          >
-            {isPrinting ? (
-              <ActivityIndicator size="small" color="#6B7280" />
-            ) : (
-              <FileText size={16} color="#6B7280" />
-            )}
+          <TouchableOpacity style={styles.tabButton} onPress={handlePrint}>
+            <FileText size={16} color="#6B7280" />
             <Text style={styles.tabButtonText}>طباعة PDF</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.tabButton} onPress={handleCall}>
@@ -1340,9 +1260,6 @@ const styles = StyleSheet.create({
     gap: 6,
     flex: 1,
     minWidth: 100,
-  },
-  tabButtonDisabled: {
-    opacity: 0.5,
   },
   tabButtonText: {
     color: '#374151',
