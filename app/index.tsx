@@ -1,28 +1,26 @@
-import { useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Redirect } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function Index() {
   const { session, loading } = useAuth();
-  const router = useRouter();
 
-  useEffect(() => {
-    if (!loading) {
-      if (!session) {
-        router.replace('/(auth)/sign-in');
-      } else {
-        router.replace('/(tabs)');
-      }
-    }
-  }, [session, loading]);
+  console.log('Index - Loading:', loading, 'Session:', session ? 'Yes' : 'No');
 
-  return (
-    <View style={styles.container}>
-      <ActivityIndicator size="large" color="#10B981" />
-      <Text style={styles.loadingText}>جاري التحميل...</Text>
-    </View>
-  );
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color="#10B981" />
+        <Text style={styles.loadingText}>جاري التحميل...</Text>
+      </View>
+    );
+  }
+
+  if (!session) {
+    return <Redirect href="/(auth)/sign-in" />;
+  }
+
+  return <Redirect href="/(tabs)" />;
 }
 
 const styles = StyleSheet.create({
